@@ -32,6 +32,8 @@ impl Form {
 
     pub fn handle_key(&mut self, key: KeyEvent) {
         let count = self.inputs.len();
+        let edited = self.focus;
+        let before = self.inputs[edited].text().to_owned();
         let is_note = FIELDS[self.focus].0 == Field::Note;
         let input = &mut self.inputs[self.focus];
         match key.code {
@@ -51,13 +53,15 @@ impl Form {
             }
             _ => return,
         }
-        self.link_display_name();
+        if self.inputs[edited].text() != before {
+            self.link_display_name(edited);
+        }
     }
 
-    fn link_display_name(&mut self) {
+    fn link_display_name(&mut self, edited: usize) {
         let derived = card::derived_display_name(|f| self.text(f).to_owned());
         let display_name = index_of(Field::DisplayName);
-        if self.focus == display_name {
+        if edited == display_name {
             self.is_linked = self.inputs[display_name].text() == derived;
         } else if self.is_linked && self.inputs[display_name].text() != derived {
             self.inputs[display_name].replace(derived);

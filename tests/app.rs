@@ -679,6 +679,14 @@ fn failed_save_shows_the_error_and_keeps_the_form_open() {
         ("s", ratatui::style::Color::Red)
     );
     assert!(detail(&screen(&app)).contains("Hanna"));
+
+    press(&mut app, KeyCode::Esc);
+    assert!(
+        screen(&app)
+            .last()
+            .unwrap()
+            .contains("Discard unsaved changes? y/n")
+    );
 }
 
 #[test]
@@ -698,4 +706,32 @@ fn cursor_sits_after_wide_characters_in_the_focused_input() {
         terminal.get_cursor_position().unwrap(),
         ratatui::layout::Position::new(detail_x + 1 + label + anna_ri_cells, 2)
     );
+}
+
+#[test]
+fn a_custom_display_name_stays_custom_when_the_structured_name_catches_up_with_it() {
+    let dir = address_book(
+        "edit-stays-custom",
+        &[(
+            "jon.vcf",
+            "BEGIN:VCARD\r\nN:Doe;Jon;;;\r\nFN:Jon Do\r\nEND:VCARD\r\n",
+        )],
+    );
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Tab);
+    }
+    press(&mut app, KeyCode::Backspace);
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Tab);
+    assert!(detail(&screen(&app)).contains("(custom)"));
+
+    for _ in 0..4 {
+        press(&mut app, KeyCode::Up);
+    }
+    type_text(&mut app, "a");
+    let detail = detail(&screen(&app));
+    assert_shows(&detail, &["Jon Do", "(custom)"]);
+    assert!(!detail.contains("Jona Do"), "{detail}");
 }

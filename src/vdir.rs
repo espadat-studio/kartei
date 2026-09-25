@@ -36,7 +36,10 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".tmp");
     let temp = PathBuf::from(temp);
-    let result = write_synced(&temp, bytes, path).and_then(|()| fs::rename(&temp, path));
+    let dir = path.parent().expect("card path is inside the address book");
+    let result = write_synced(&temp, bytes, path)
+        .and_then(|()| fs::rename(&temp, path))
+        .and_then(|()| File::open(dir)?.sync_all());
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }

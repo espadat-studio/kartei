@@ -232,7 +232,10 @@ proptest! {
         value in "[^\r]{0,300}",
     ) {
         let (field, property) = FIELDS[field];
-        let mut card = Card::parse(b"BEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n").unwrap();
+        let mut card = Card::parse(
+            b"BEGIN:VCARD\r\nitem1.FN;X-A=b:x\r\nN;CHARSET=utf-8:a;b;;;\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
         card.set(field, &value);
         let edited = card.lines().iter().filter(|l| l.name() == property);
         for physical in edited.flat_map(|l| l.raw().split_inclusive(|&b| b == b'\n')) {

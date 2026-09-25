@@ -95,6 +95,7 @@ impl App {
     }
 
     fn edit(&mut self, key: KeyEvent) {
+        self.error = None;
         let index = self.visible[self.selected];
         let form = self.form.as_mut().expect("edit mode has a form");
         match key.code {

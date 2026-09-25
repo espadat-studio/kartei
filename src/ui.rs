@@ -37,7 +37,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Edit",
         &[
-            ("Tab/S-Tab", "next/previous field"),
+            ("Tab/S-Tab Up/Down", "next/previous field"),
             ("Ctrl-s", "save"),
             ("Esc", "cancel"),
         ],
@@ -109,7 +109,10 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         for (row, text) in input.text().split('\n').enumerate() {
             let label = if row == 0 { label } else { "" };
             let mut line = Line::from(vec![
-                Span::styled(format!("{label:<12} "), style),
+                Span::styled(
+                    format!("{label:<width$}", width = LABEL_WIDTH.into()),
+                    style,
+                ),
                 Span::raw(text.to_owned()),
             ]);
             if *field == Field::DisplayName {
