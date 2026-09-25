@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:escaped-adr
+N:Meier;Max;;;
+FN:Max Meier
+ADR;TYPE=work:PO Box 7;Building B;Hauptstr. 5\, Hinterhaus\nc/o Meier\; 2. OG;Berlin;Berlin;10115;Germany
+END:VCARD

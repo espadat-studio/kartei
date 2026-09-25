@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Birthday, Card, Labeled};
+use kartei::card::{Address, Birthday, Card, Labeled};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -107,4 +107,35 @@ fn invalid_birthday_is_raw_and_read_only() {
 #[test]
 fn card_without_birthday_has_none() {
     assert_eq!(fixture("apple-grouped-labels.vcf").birthday(), None);
+}
+
+#[test]
+fn escaped_address_components_are_split_and_unescaped() {
+    let addresses = fixture("escaped-adr.vcf").addresses();
+    assert_eq!(
+        addresses,
+        [Labeled {
+            label: Some("work".into()),
+            value: Address {
+                po_box: "PO Box 7".into(),
+                extended: "Building B".into(),
+                street: "Hauptstr. 5, Hinterhaus\nc/o Meier; 2. OG".into(),
+                city: "Berlin".into(),
+                region: "Berlin".into(),
+                postal_code: "10115".into(),
+                country: "Germany".into(),
+            },
+        }]
+    );
+}
+
+#[test]
+fn grouped_address_with_missing_components_reads_empty() {
+    let addresses = fixture("apple-grouped-labels.vcf").addresses();
+    assert_eq!(addresses[0].label.as_deref(), Some("home"));
+    assert_eq!(addresses[0].value.street, "Calle Mayor 1");
+    assert_eq!(addresses[0].value.postal_code, "28013");
+    let short = Card::parse(b"BEGIN:VCARD\r\nADR:;;Main St\r\nEND:VCARD\r\n").addresses();
+    assert_eq!(short[0].value.street, "Main St");
+    assert_eq!(short[0].value.country, "");
 }

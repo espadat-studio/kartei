@@ -12,6 +12,35 @@ pub struct Labeled<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Address {
+    pub po_box: String,
+    pub extended: String,
+    pub street: String,
+    pub city: String,
+    pub region: String,
+    pub postal_code: String,
+    pub country: String,
+}
+
+impl Address {
+    fn parse(value: &str) -> Self {
+        let mut components = line::split_unescaped(value, ';')
+            .into_iter()
+            .map(line::unescape);
+        let mut next = || components.next().unwrap_or_default();
+        Self {
+            po_box: next(),
+            extended: next(),
+            street: next(),
+            city: next(),
+            region: next(),
+            postal_code: next(),
+            country: next(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
     lines: Vec<ContentLine>,
 }
@@ -59,6 +88,10 @@ impl Card {
 
     pub fn emails(&self) -> Vec<Labeled<String>> {
         self.labeled("EMAIL", line::unescape)
+    }
+
+    pub fn addresses(&self) -> Vec<Labeled<Address>> {
+        self.labeled("ADR", Address::parse)
     }
 
     pub fn birthday(&self) -> Option<Birthday> {
