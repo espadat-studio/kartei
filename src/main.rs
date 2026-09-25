@@ -10,7 +10,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
 fn main() -> ExitCode {
     let Some(path) = env::args_os().nth(1).or_else(|| env::var_os("KARTEI_DIR")) else {
-        eprintln!("usage: kartei <address-book-dir-or-vcf-file> (or set KARTEI_DIR)");
+        eprintln!("usage: kartei <dir-or-file.vcf> (or set KARTEI_DIR)");
         return ExitCode::FAILURE;
     };
     let path = PathBuf::from(path);
