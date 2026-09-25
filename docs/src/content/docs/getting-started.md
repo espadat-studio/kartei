@@ -62,6 +62,10 @@ password.fetch = ["command", "pass", "dav"]
 
 `collections = null` syncs a single address book straight into `path`, which is the flat layout kartei expects. Run `vdirsyncer sync` before and after editing.
 
+## Lossless edits
+
+kartei rewrites only the lines an edit touches. Every other line is written back byte for byte, so Apple extras (`itemN.` groups, `X-ABLabel`, `PHOTO`, unknown `X-` properties) survive. Before saving, kartei checks that the file on disk still matches what it loaded; see [Prompts](/keymap/#prompts).
+
 ## Cards kartei skips
 
 A file without `BEGIN:VCARD`/`END:VCARD`, with several contacts, or with invalid UTF-8 is skipped at load. The status bar shows how many were skipped; press `!` to list each path and the reason.
