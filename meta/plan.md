@@ -32,11 +32,10 @@ Smallest tool used daily instead of Thunderbird for contacts.
   - save failure: red status + Prompt; form stays open
   - bad field value (e.g. BDAY): show raw, field read-only, never rewritten
   - panic hook restores terminal. No log file.
-- D13 tests (runner: cargo nextest):
-  - fixture corpus `tests/fixtures/*.vcf`, synthetic only (public repo): apple-grouped-labels, apple-omit-year, v4-yearless, company, folded-photo, lf-endings, utf8-fold-midchar, escaped-adr, fn-custom, bad-*; byte-identity + expected view
-  - proptest (dev-dep): round-trip identity, edit locality (changed lines ⊆ field/Group), fold ≤75 octets + UTF-8 safe; default 256 cases
-  - unit tests co-located: derive_fn, BDAY parse/write, Label decode, conflict check
-  - TUI: ratatui TestBackend, key events -> state + few buffer asserts. No insta, no PTY e2e, no fuzz.
+- D13 tests (runner: cargo nextest), two seams:
+  - Card seam (pure bytes in/out): parse -> field view -> edit -> write. Fixture corpus `tests/fixtures/*.vcf`, synthetic only (public repo): apple-grouped-labels, apple-omit-year, v4-yearless, company, folded-photo, lf-endings, utf8-fold-midchar, escaped-adr, fn-custom, bad-*. proptest (dev-dep): round-trip identity, edit locality (changed lines within field/Group), fold <=75 octets + UTF-8 safe; default 256 cases. BDAY/Label/Display-name rules asserted via view + edits, no helper unit tests.
+  - App seam: key events against temp Address book dir; assert file bytes on disk + few TestBackend lines. Covers browse, search, edit/save, new Card, conflicts (mutate file between keys), skipped Cards, OSC 52 bytes. vdir/input/osc52 have no own seam.
+  - One CLI check via `std::process::Command` + `CARGO_BIN_EXE_kartei`: missing path -> exit 1. No assert_cmd, no insta, no PTY e2e, no fuzz.
 - D14 CI/release/tooling: mirror ~/code/{dublette,auberge,colporteur}; split scaffolding into several tickets.
   - workflows: master (check + test, no ffmpeg), semantic-pr lint-title verbatim, release (release-plz + crates.io OIDC trusted publishing + binaries draft->publish), build-binaries, docs (Astro/Starlight on Pages)
   - binaries: x86_64/aarch64 linux, aarch64 macOS. No Windows.
@@ -67,27 +66,22 @@ None.
 Phase 1 card (pure)
 1. `feat(card): parse and write content lines losslessly` - line.rs unfold/parse, raw bytes kept; card/mod.rs Card; fixtures folded-photo, lf-endings, utf8-fold-midchar. Tests: fixture byte identity; proptest `write(parse(x)) == x`.
 2. `feat(card): fold and escape edited values` - line.rs fold 75 octets, escape/unescape. Tests: proptest fold <=75 + UTF-8 safe; escape round-trip units.
-3. `feat(card): read name, contact and note fields` - view N, FN, TEL, EMAIL, ORG, NOTE, URL; label.rs decode TYPE + X-ABLabel. Fixtures apple-grouped-labels, company, fn-custom. Tests: expected views; label decode units.
-4. `feat(card): parse birthday forms` - bday.rs read full, Apple omit-year, `--MMDD`; bad value -> raw read-only. Fixtures apple-omit-year, v4-yearless. Tests: units per form.
+3. `feat(card): read name, contact and note fields` - view N, FN, TEL, EMAIL, ORG, NOTE, URL; label.rs decode TYPE + X-ABLabel. Fixtures apple-grouped-labels, company, fn-custom. Tests: expected views incl. decoded Labels.
+4. `feat(card): parse birthday forms` - bday.rs read full, Apple omit-year, `--MMDD`; bad value -> raw read-only. Fixtures apple-omit-year, v4-yearless. Tests: view per fixture form; bad value raw.
 5. `feat(card): parse address components` - ADR view (D17). Fixture escaped-adr. Tests: components + escapes.
-6. `feat(card): edit single-value fields with linked display name` - set N/FN/ORG/NOTE; derive_fn; linked/custom (D4). Tests: derive_fn units; proptest edit locality.
+6. `feat(card): edit single-value fields with linked display name` - set N/FN/ORG/NOTE; derive_fn; linked/custom (D4). Tests: linked FN follows N edit, custom FN untouched; proptest edit locality.
 7. `feat(card): add and remove multi-value fields` - TEL/EMAIL/ADR add (TYPE fixed set, D5), edit keeps Group, remove deletes Group. Tests: group removal on apple fixture; edit locality.
 8. `feat(card): write birthdays per card convention` - D6. Tests: 3.0 -> Apple form, 4.0 -> `--MMDD`, existing form kept.
 9. `feat(card): create new cards` - uuid dep; D7 template. Tests: required lines present, round-trips, FN from N else ORG.
 
-Phase 2 vdir
-10. `feat(vdir): load address book and report skipped cards` - D12 skip reasons. Fixtures bad-*. Tests: temp dir under `std::env::temp_dir()`; counts + reasons.
-11. `feat(vdir): save atomically with conflict check` - temp + rename; byte compare (D8). Tests: unchanged -> saved; changed/deleted -> Conflict.
-
-Phase 3 TUI
-12. `feat(app): browse, sort and search cards` - app.rs Browse/Search state (D9, D10). Tests: sort order, search over FN/ORG/EMAIL/TEL digits.
-13. `feat(ui): render two-pane layout` - ratatui dep; ui.rs; main.rs arg/`KARTEI_DIR`, panic hook, loop. Tests: TestBackend buffer lines; missing path -> exit 1.
-14. `feat(input): add text input` - input.rs single + multi-line, UTF-8 cursor. Tests: insert/delete/move units incl. wide chars.
-15. `feat(app): edit and save cards` - Edit mode, Alt-a/d/l, Ctrl-s, Esc dirty confirm. Tests: TestBackend "e, type, Ctrl-s" writes expected bytes.
-16. `feat(app): prompt on conflicts and errors` - Prompt mode, `!` skipped list, R reload. Tests: external change -> prompt; reload/overwrite paths.
-17. `feat(app): create cards from browse` - `n`. Tests: new file `<UID>.vcf` appears in list.
-18. `feat(app): copy focused value via osc 52` - osc52.rs base64 + sequence. Tests: base64 vectors, sequence bytes.
-19. `docs: document keymap and usage` - README + docs pages.
+Phase 2 app (App seam)
+10. `feat(app): load address book, browse, sort and search` - vdir load + skip reasons (D12); app Browse/Search (D9, D10). Tests: temp dir with fixtures + bad-*: order, search over FN/ORG/EMAIL/TEL digits, skipped count + `!` reasons.
+11. `feat(ui): render two-pane layout` - ratatui dep; ui.rs; main.rs arg/`KARTEI_DIR`, panic hook, loop. Tests: TestBackend list/detail lines; CLI missing path -> exit 1.
+12. `feat(app): edit and save cards` - input.rs, Edit mode, Alt-a/d/l, Ctrl-s, Esc dirty confirm, atomic write. Tests: "e, type, Ctrl-s" writes expected bytes; multi-line NOTE; wide-char cursor edit.
+13. `feat(app): prompt on conflicts` - byte compare at save (D8), Prompt mode, R reload. Tests: file changed/deleted between keys -> prompt; reload, overwrite, recreate paths.
+14. `feat(app): create cards from browse` - `n`. Tests: new `<UID>.vcf` on disk and in list.
+15. `feat(app): copy focused value via osc 52` - osc52.rs. Tests: emitted bytes for known value.
+16. `docs: document keymap and usage` - README + docs pages.
 
 Final
 - PR review of branch as another engineer.
