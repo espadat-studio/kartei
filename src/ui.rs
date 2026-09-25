@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 use crate::app::{App, Mode};
 use crate::card::Card;
 use crate::form::Form;
+use crate::vdir::Conflict;
 
 const HINTS: &str = " j/k move  / search  e edit  n new  ? help  q quit";
 const EDIT_HINTS: &str =
@@ -22,6 +23,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("/", "search"),
             ("e/Enter", "edit card"),
             ("n", "new card"),
+            ("R", "reload from disk"),
             ("!", "list skipped cards"),
             ("?", "show keys"),
             ("q", "quit"),
@@ -45,6 +47,14 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("Alt-l", "cycle label"),
             ("Ctrl-s", "save"),
             ("Esc", "cancel"),
+        ],
+    ),
+    (
+        "Conflict",
+        &[
+            ("r", "reload, drop edit"),
+            ("o", "overwrite/recreate"),
+            ("Esc", "keep editing"),
         ],
     ),
     ("Prompt, Help", &[("any key", "close")]),
@@ -81,6 +91,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
         Mode::Edit => EDIT_HINTS.to_owned(),
         Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
+        Mode::Conflict(Conflict::Changed) => {
+            " Card changed on disk: r reload  o overwrite  Esc keep editing".to_owned()
+        }
+        Mode::Conflict(Conflict::Deleted) => {
+            " Card deleted on disk: r reload  o recreate  Esc keep editing".to_owned()
+        }
         _ => HINTS.to_owned(),
     };
     let hints = match app.error() {
@@ -94,7 +110,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     match app.mode() {
         Mode::Prompt => draw_overlay(frame, "Skipped cards", vec![skipped(app)]),
         Mode::Help => draw_overlay(frame, "Keys", keymap()),
-        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard => {}
+        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard | Mode::Conflict(_) => {}
     }
 }
 

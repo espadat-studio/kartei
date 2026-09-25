@@ -17,6 +17,21 @@ pub struct Skipped {
     pub defect: Defect,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conflict {
+    Changed,
+    Deleted,
+}
+
+pub fn conflict(path: &Path, loaded: &[u8]) -> io::Result<Option<Conflict>> {
+    match fs::read(path) {
+        Ok(bytes) if bytes == loaded => Ok(None),
+        Ok(_) => Ok(Some(Conflict::Changed)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Some(Conflict::Deleted)),
+        Err(err) => Err(err),
+    }
+}
+
 pub fn load(dir: &Path) -> io::Result<AddressBook> {
     let mut book = AddressBook {
         dir: dir.to_owned(),

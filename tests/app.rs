@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use kartei::app::{App, Mode};
-use kartei::vdir::AddressBook;
+use kartei::vdir::{AddressBook, Conflict};
 use kartei::{ui, vdir};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -662,7 +662,7 @@ fn multi_line_note_and_non_ascii_text_round_trip_through_the_form() {
 fn failed_save_shows_the_error_and_keeps_the_form_open() {
     let dir = address_book("edit-fail", &[("anna.vcf", ANNA)]);
     let mut app = App::new(vdir::load(&dir).unwrap());
-    fs::remove_dir_all(&dir).unwrap();
+    fs::create_dir(dir.join("anna.vcf.tmp")).unwrap();
     press(&mut app, KeyCode::Char('e'));
     replace_given_name(&mut app, "Anna", "Hanna");
     save(&mut app);
@@ -1121,4 +1121,113 @@ fn a_new_card_left_empty_or_cancelled_writes_nothing() {
     press(&mut app, KeyCode::Char('y'));
     assert!(vcf_files(&dir).is_empty());
     assert!(app.cards().is_empty());
+}
+
+const EXTERNAL: &str =
+    "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Adams;Anne;;;\r\nFN:Anne Adams\r\nEND:VCARD\r\n";
+
+fn edit_then_change_on_disk(test: &str) -> (PathBuf, App) {
+    let dir = address_book(test, &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Anna", "Hanna");
+    fs::write(dir.join("anna.vcf"), EXTERNAL).unwrap();
+    save(&mut app);
+    (dir.join("anna.vcf"), app)
+}
+
+#[test]
+fn saving_over_a_changed_file_prompts_and_keeps_the_external_change() {
+    let (path, app) = edit_then_change_on_disk("conflict-prompt");
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Changed));
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &[
+            "changed on disk",
+            "r reload",
+            "o overwrite",
+            "Esc keep editing",
+        ],
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn r_reloads_the_external_version_and_drops_the_edit() {
+    let (path, mut app) = edit_then_change_on_disk("conflict-reload");
+    press(&mut app, KeyCode::Char('r'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(listed(&app), ["Anne Adams"]);
+    assert!(detail(&screen(&app)).contains("Anne Adams"));
+    assert_eq!(fs::read_to_string(path).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn o_overwrites_the_external_change_with_the_edit() {
+    let (path, mut app) = edit_then_change_on_disk("conflict-overwrite");
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        ANNA.replace("Anna", "Hanna")
+    );
+    assert_eq!(listed(&app), ["Hanna Adams"]);
+}
+
+#[test]
+fn esc_returns_to_the_form_with_the_edit_intact() {
+    let (path, mut app) = edit_then_change_on_disk("conflict-esc");
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Edit);
+    assert_shows(&detail(&screen(&app)), &["Hanna"]);
+    assert_eq!(fs::read_to_string(path).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn saving_a_deleted_file_offers_recreate_which_writes_the_edit_back() {
+    let dir = address_book("conflict-deleted", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Anna", "Hanna");
+    fs::remove_file(dir.join("anna.vcf")).unwrap();
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Deleted));
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &["deleted on disk", "o recreate"],
+    );
+    assert!(!dir.join("anna.vcf").exists());
+
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace("Anna", "Hanna")
+    );
+}
+
+#[test]
+fn shift_r_reloads_cards_added_changed_or_removed_on_disk() {
+    let mut app = open("reload");
+    let dir = std::env::temp_dir().join(format!("kartei-reload-{}", std::process::id()));
+    select(&mut app, "Bob Brown");
+    fs::write(
+        dir.join("new.vcf"),
+        card("Cole;Cy;;;", "Cy Cole", "1", "c@c"),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("bob.vcf"),
+        card("Brown;Rob;;;", "Rob Brown", "1", "r@b"),
+    )
+    .unwrap();
+    fs::remove_file(dir.join("zed.vcf")).unwrap();
+    fs::write(dir.join("broken.vcf"), "nope").unwrap();
+
+    press(&mut app, KeyCode::Char('R'));
+    assert_eq!(
+        listed(&app),
+        ["ACME Plumbing", "Anna Adams", "Rob Brown", "Cy Cole"]
+    );
+    assert_eq!(app.selected_card().unwrap().display_name(), "Rob Brown");
+    assert_eq!(app.skipped().len(), 1);
 }
