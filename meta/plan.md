@@ -18,7 +18,7 @@ Smallest tool used daily instead of Thunderbird for contacts.
 - D7b all writes atomic: temp file in same dir + rename.
 - D8 conflicts: keep loaded bytes; at save re-read and compare full bytes. Mismatch/deleted -> refuse, keep edit, prompt [r] reload (discard) / [o] overwrite (or recreate) / [esc] keep editing. Reload-all key. No fs watch, no merge.
 - D9 modes + keys (hardcoded):
-  - Browse: j/k/arrows move, g/G top/bottom, / search, e/Enter edit, n new, y copy focused value, R reload all, ? help, q quit
+  - Browse: j/k/arrows move, g/G top/bottom, / search, e/Enter edit, n new, y copy (Prompt lists Card values 1-9, digit copies), R reload all, ? help, q quit
   - Search: live filter, Enter keep, Esc clear
   - Edit form: Tab/S-Tab/Up/Down move, typing edits, Alt-a add value, Alt-d remove value, Alt-l cycle Label, Ctrl-s save, Esc cancel (confirm if dirty). NOTE: Enter = newline
   - Prompt: modal choice (conflicts, discard, errors)
