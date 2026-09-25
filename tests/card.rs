@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Address, Birthday, Card, Labeled};
+use kartei::card::{Address, Birthday, Card, Labeled, Organization};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -138,4 +138,35 @@ fn grouped_address_with_missing_components_reads_empty() {
     let short = Card::parse(b"BEGIN:VCARD\r\nADR:;;Main St\r\nEND:VCARD\r\n").addresses();
     assert_eq!(short[0].value.street, "Main St");
     assert_eq!(short[0].value.country, "");
+}
+
+#[test]
+fn company_card_reads_organization_note_and_urls() {
+    let card = fixture("company.vcf");
+    assert_eq!(card.display_name(), "ACME Plumbing");
+    assert_eq!(card.structured_name(), (String::new(), String::new()));
+    assert_eq!(
+        card.organization(),
+        Some(Organization {
+            company: "ACME Plumbing".into(),
+            department: "Emergency Repairs".into(),
+        })
+    );
+    assert_eq!(
+        card.note().as_deref(),
+        Some("Open 24/7.\nAsk for Bob, not Rob.")
+    );
+    assert_eq!(
+        card.urls(),
+        ["https://acme.example", "https://acme.example/emergency"]
+    );
+    assert_eq!(labeled(&card.phones()), [(Some("work"), "+1 555 0100")]);
+}
+
+#[test]
+fn card_without_organization_or_note_has_none() {
+    let card = fixture("fn-custom.vcf");
+    assert_eq!(card.organization(), None);
+    assert_eq!(card.note(), None);
+    assert!(card.urls().is_empty());
 }

@@ -41,6 +41,12 @@ impl Address {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Organization {
+    pub company: String,
+    pub department: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
     lines: Vec<ContentLine>,
 }
@@ -88,6 +94,25 @@ impl Card {
 
     pub fn emails(&self) -> Vec<Labeled<String>> {
         self.labeled("EMAIL", line::unescape)
+    }
+
+    pub fn organization(&self) -> Option<Organization> {
+        let value = self.values("ORG").next()?;
+        let mut components = line::split_unescaped(value, ';')
+            .into_iter()
+            .map(line::unescape);
+        Some(Organization {
+            company: components.next().unwrap_or_default(),
+            department: components.next().unwrap_or_default(),
+        })
+    }
+
+    pub fn note(&self) -> Option<String> {
+        self.values("NOTE").next().map(line::unescape)
+    }
+
+    pub fn urls(&self) -> Vec<String> {
+        self.values("URL").map(line::unescape).collect()
     }
 
     pub fn addresses(&self) -> Vec<Labeled<Address>> {

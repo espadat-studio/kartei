@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:company
+N:;;;;
+FN:ACME Plumbing
+ORG:ACME Plumbing;Emergency Repairs
+X-ABShowAs:COMPANY
+TEL;type=WORK;type=VOICE:+1 555 0100
+item1.URL;type=pref:https\://acme.example
+item1.X-ABLabel:_$!<HomePage>!$_
+URL:https://acme.example/emergency
+NOTE:Open 24/7.\nAsk for Bob\, not Rob.
+END:VCARD
