@@ -28,7 +28,7 @@ Smallest tool used daily instead of Thunderbird for contacts.
 - D11 config: none. Address book = positional arg, else `KARTEI_DIR`, else error. Single flat dir (user's vdirsyncer: Radicale, `collections = null`, `~/.local/share/contacts/`). Multi-book out of scope.
 - D12 errors:
   - startup fatal (bad path/perms): stderr, exit 1, no TUI
-  - bad Card at load (no BEGIN/END, multiple VCARDs, invalid UTF-8): skip; status "N cards skipped"; `!` lists path + reason
+  - bad Card at load (no BEGIN/END, invalid UTF-8): skip only that Card, even inside a Bundle (ADR-0002); status "N cards skipped"; `!` lists path + reason
   - save failure: red status + Prompt; form stays open
   - bad field value (e.g. BDAY): show raw, field read-only, never rewritten
   - panic hook restores terminal. No log file.

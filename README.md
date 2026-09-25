@@ -2,7 +2,7 @@
 
 Keyboard-driven editor for contacts stored as vCard files in a local vdir.
 
-kartei lists, searches, views, edits and creates contacts in a directory with one `.vcf` file per contact. It never talks to a server; sync with [vdirsyncer](https://vdirsyncer.pimutils.org/).
+kartei lists, searches, views, edits and creates contacts in a directory of `.vcf` files or in a single `.vcf` Bundle, such as Thunderbird writes. It never talks to a server; sync with [vdirsyncer](https://vdirsyncer.pimutils.org/).
 
 Docs: <https://kartei.espadat.com>
 
@@ -24,13 +24,17 @@ cargo install --git https://github.com/espadat-studio/kartei
 
 ## Setup
 
+```text
+kartei <dir-or-file.vcf>
+```
+
 Point kartei at the directory vdirsyncer syncs into:
 
 ```bash
 kartei ~/.local/share/contacts
 ```
 
-Or pass a single `.vcf` file, such as a Thunderbird export: `kartei Contacts.vcf`. New Cards go after the file's last Card, with its line endings. In a directory, each new Card gets its own `<uid>.vcf`.
+Or pass a single `.vcf` file, such as a Thunderbird Bundle: `kartei Contacts.vcf`. New Cards go after the file's last Card, with its line endings. In a directory, each new Card gets its own `<uid>.vcf`. See [Edit Thunderbird contacts](https://kartei.espadat.com/getting-started/#edit-thunderbird-contacts) for the export and import round trip.
 
 Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1.
 
