@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 use crate::app::{App, Mode};
 use crate::card::Card;
 
-const HINTS: &str = " j/k move  g/G top/bottom  q quit";
+const HINTS: &str = " j/k move  g/G top/bottom  / search  q quit";
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let [main, status] =
@@ -15,11 +15,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let [list, detail] =
         Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(main);
 
-    let names = app.cards().iter().map(Card::display_name);
+    let title = match app.query() {
+        "" => "Cards".to_owned(),
+        query => format!("Cards /{query}"),
+    };
+    let names = app.cards().into_iter().map(Card::display_name);
     let mut state = ListState::default().with_selected(Some(app.selected()));
     frame.render_stateful_widget(
         List::new(names)
-            .block(Block::bordered().title("Cards"))
+            .block(Block::bordered().title(title))
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED)),
         list,
         &mut state,
@@ -27,7 +31,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let lines = app.selected_card().map(details).unwrap_or_default();
     frame.render_widget(Paragraph::new(lines).block(Block::bordered()), detail);
-    frame.render_widget(Paragraph::new(HINTS), status);
+    let hints = match app.mode() {
+        Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
+        _ => HINTS.to_owned(),
+    };
+    frame.render_widget(Paragraph::new(hints), status);
     if let Some(skipped) = skipped_count(app.skipped().len()) {
         frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
     }
