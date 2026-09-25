@@ -8,3 +8,6 @@ description = "Keyboard-driven editor for contacts stored as vCard files in a lo
 
 [dev-dependencies]
 proptest = "1.11.0"
+
+[dependencies]
+ratatui = "0.30.2"
