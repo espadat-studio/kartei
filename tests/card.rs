@@ -362,3 +362,32 @@ fn clearing_a_birthday_removes_its_line() {
     card.set_birthday(None);
     assert!(!card.lines().iter().any(|l| l.name() == "BDAY"));
 }
+
+#[test]
+fn a_new_card_round_trips_and_parses_back_to_the_entered_fields() {
+    let mut card = Card::new("c0ffee");
+    card.set(Field::Given, "Ann");
+    card.set(Field::Family, "Lee");
+    card.set(Field::DisplayName, "Ann Lee");
+    card.add(Kind::Phone, &["+1 555".into()], Some("cell"));
+    card.set(Field::Note, "hi, there");
+    let bytes = card.to_bytes();
+    assert_eq!(
+        String::from_utf8(bytes.clone()).unwrap(),
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:c0ffee\r\nN:Lee;Ann;;;\r\nFN:Ann Lee\r\nTEL;TYPE=CELL:+1 555\r\nNOTE:hi\\, there\r\nEND:VCARD\r\n"
+    );
+    let parsed = Card::parse(&bytes).unwrap();
+    assert_eq!(parsed.to_bytes(), bytes);
+    assert_eq!(parsed.structured_name(), ("Lee".into(), "Ann".into()));
+    assert_eq!(labeled(&parsed.phones()), [(Some("cell"), "+1 555")]);
+    assert_eq!(parsed.note().as_deref(), Some("hi, there"));
+}
+
+#[test]
+fn display_name_falls_back_to_the_company_without_a_structured_name() {
+    let parts = |field| match field {
+        Field::Company => "ACME".to_owned(),
+        _ => String::new(),
+    };
+    assert_eq!(card::derived_display_name(parts), "ACME");
+}

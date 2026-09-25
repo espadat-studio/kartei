@@ -8,7 +8,7 @@ use crate::app::{App, Mode};
 use crate::card::Card;
 use crate::form::Form;
 
-const HINTS: &str = " j/k move  / search  e edit  ? help  q quit";
+const HINTS: &str = " j/k move  / search  e edit  n new  ? help  q quit";
 const EDIT_HINTS: &str =
     " Tab/S-Tab move  Alt-a/d add/remove  Alt-l label  Ctrl-s save  Esc cancel";
 const LABEL_WIDTH: u16 = 13;
@@ -21,6 +21,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("g/G", "top/bottom"),
             ("/", "search"),
             ("e/Enter", "edit card"),
+            ("n", "new card"),
             ("!", "list skipped cards"),
             ("?", "show keys"),
             ("q", "quit"),

@@ -1043,3 +1043,82 @@ fn a_two_line_street_round_trips_with_its_escaped_newline() {
         &["Street", "Main St 1", "Apt 2", "(home)"],
     );
 }
+
+fn vcf_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    files.sort();
+    files
+}
+
+#[test]
+fn n_creates_one_card_named_after_its_uid_and_selects_it() {
+    let dir = address_book(
+        "new-card",
+        &[("zed.vcf", &card("Zed;Zoe;;;", "Zoe Zed", "1", "z@z"))],
+    );
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('n'));
+    assert_eq!(app.mode(), Mode::Edit);
+    focus(&mut app, "Given name");
+    type_text(&mut app, "Ann");
+    focus(&mut app, "Family name");
+    type_text(&mut app, "Lee");
+    focus(&mut app, "Phone");
+    type_text(&mut app, "+1 555 0100");
+    save(&mut app);
+
+    assert_eq!(app.mode(), Mode::Browse);
+    let files = vcf_files(&dir);
+    assert_eq!(files.len(), 2, "{files:?}");
+    let created = files.iter().find(|p| !p.ends_with("zed.vcf")).unwrap();
+    let text = fs::read_to_string(created).unwrap();
+    let uid = text.lines().find_map(|l| l.strip_prefix("UID:")).unwrap();
+    assert_eq!(
+        created.file_name().unwrap().to_str().unwrap(),
+        format!("{uid}.vcf")
+    );
+    assert_eq!(
+        text,
+        format!(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:Lee;Ann;;;\r\nFN:Ann Lee\r\nTEL:+1 555 0100\r\nEND:VCARD\r\n"
+        )
+    );
+    assert_eq!(listed(&app), ["Ann Lee", "Zoe Zed"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Ann Lee");
+}
+
+#[test]
+fn a_company_only_card_gets_its_display_name_from_the_company() {
+    let dir = address_book("new-company", &[]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('n'));
+    focus(&mut app, "Company");
+    type_text(&mut app, "ACME");
+    assert_shows(&detail(&screen(&app)), &["ACME  (linked)"]);
+    save(&mut app);
+
+    let text = fs::read_to_string(&vcf_files(&dir)[0]).unwrap();
+    assert!(
+        text.ends_with("\r\nN:;;;;\r\nFN:ACME\r\nORG:ACME\r\nEND:VCARD\r\n"),
+        "{text}"
+    );
+    assert_eq!(listed(&app), ["ACME"]);
+}
+
+#[test]
+fn a_new_card_left_empty_or_cancelled_writes_nothing() {
+    let dir = address_book("new-nothing", &[]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('n'));
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+    press(&mut app, KeyCode::Char('n'));
+    type_text(&mut app, "Dr.");
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Char('y'));
+    assert!(vcf_files(&dir).is_empty());
+    assert!(app.cards().is_empty());
+}

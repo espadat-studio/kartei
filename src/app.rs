@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use uuid::Uuid;
 
 use crate::card::Card;
 use crate::form::Form;
@@ -16,30 +17,48 @@ pub enum Mode {
     Help,
 }
 
+struct Draft {
+    path: PathBuf,
+    card: Card,
+    form: Form,
+}
+
+impl Draft {
+    fn edited(&self) -> Result<Card, String> {
+        self.form.apply(&self.card)
+    }
+}
+
 pub struct App {
+    dir: PathBuf,
     cards: Vec<(PathBuf, Card)>,
     skipped: Vec<Skipped>,
     query: String,
     visible: Vec<usize>,
     selected: usize,
     mode: Mode,
-    form: Option<Form>,
+    draft: Option<Draft>,
     error: Option<String>,
     should_quit: bool,
 }
 
 impl App {
     pub fn new(book: AddressBook) -> Self {
-        let AddressBook { mut cards, skipped } = book;
+        let AddressBook {
+            dir,
+            mut cards,
+            skipped,
+        } = book;
         cards.sort_by_cached_key(|(_, card)| sort_key(card));
         Self {
+            dir,
             visible: (0..cards.len()).collect(),
             cards,
             skipped,
             query: String::new(),
             selected: 0,
             mode: Mode::Browse,
-            form: None,
+            draft: None,
             error: None,
             should_quit: false,
         }
@@ -64,6 +83,7 @@ impl App {
             KeyCode::Char('G') => self.selected = last,
             KeyCode::Char('/') => self.mode = Mode::Search,
             KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
+            KeyCode::Char('n') => self.new_card(),
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
             KeyCode::Char('q') => self.should_quit = true,
@@ -88,25 +108,35 @@ impl App {
     }
 
     fn open_form(&mut self) {
-        if let Some(card) = self.selected_card() {
-            self.form = Some(Form::new(card));
-            self.mode = Mode::Edit;
+        if let Some(&index) = self.visible.get(self.selected) {
+            let (path, card) = &self.cards[index];
+            self.start_draft(path.clone(), card.clone());
         }
+    }
+
+    fn new_card(&mut self) {
+        let uid = Uuid::new_v4().to_string();
+        let path = self.dir.join(format!("{uid}.vcf"));
+        self.start_draft(path, Card::new(&uid));
+    }
+
+    fn start_draft(&mut self, path: PathBuf, card: Card) {
+        self.draft = Some(Draft {
+            path,
+            form: Form::new(&card),
+            card,
+        });
+        self.mode = Mode::Edit;
     }
 
     fn edit(&mut self, key: KeyEvent) {
         self.error = None;
-        let index = self.visible[self.selected];
-        let form = self.form.as_mut().expect("edit mode has a form");
+        let draft = self.draft.as_mut().expect("edit mode has a draft");
         match key.code {
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => self.save(index),
-            KeyCode::Esc
-                if form.apply(&self.cards[index].1).as_ref() != Ok(&self.cards[index].1) =>
-            {
-                self.mode = Mode::Discard
-            }
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => self.save(),
+            KeyCode::Esc if draft.edited().as_ref() != Ok(&draft.card) => self.mode = Mode::Discard,
             KeyCode::Esc => self.close_form(),
-            _ => form.handle_key(key),
+            _ => draft.form.handle_key(key),
         }
     }
 
@@ -118,35 +148,34 @@ impl App {
         }
     }
 
-    fn save(&mut self, index: usize) {
-        let (path, card) = &self.cards[index];
-        let edited = match self
-            .form
-            .as_ref()
-            .expect("edit mode has a form")
-            .apply(card)
-        {
+    fn save(&mut self) {
+        let draft = self.draft.as_ref().expect("edit mode has a draft");
+        let edited = match draft.edited() {
             Ok(edited) => edited,
             Err(err) => {
                 self.error = Some(err);
                 return;
             }
         };
-        if edited != *card
-            && let Err(err) = vdir::save(path, &edited.to_bytes())
-        {
+        if edited == draft.card {
+            return self.close_form();
+        }
+        if let Err(err) = vdir::save(&draft.path, &edited.to_bytes()) {
             self.error = Some(format!("save failed: {err}"));
             return;
         }
-        let path = path.clone();
-        self.cards[index].1 = edited;
+        let path = draft.path.clone();
+        match self.cards.iter_mut().find(|(p, _)| *p == path) {
+            Some((_, card)) => *card = edited,
+            None => self.cards.push((path.clone(), edited)),
+        }
         self.close_form();
         self.cards.sort_by_cached_key(|(_, card)| sort_key(card));
         self.filter(self.cards.iter().position(|(p, _)| *p == path));
     }
 
     fn close_form(&mut self) {
-        self.form = None;
+        self.draft = None;
         self.error = None;
         self.mode = Mode::Browse;
     }
@@ -181,7 +210,7 @@ impl App {
     }
 
     pub fn form(&self) -> Option<&Form> {
-        self.form.as_ref()
+        self.draft.as_ref().map(|draft| &draft.form)
     }
 
     pub fn error(&self) -> Option<&str> {

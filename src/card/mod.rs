@@ -144,18 +144,22 @@ fn replace_components<'a>(
 }
 
 pub fn derived_display_name(part: impl Fn(Field) -> String) -> String {
-    [
+    let name = [
         Field::Prefixes,
         Field::Given,
         Field::Additional,
         Field::Family,
         Field::Suffixes,
     ]
-    .map(part)
+    .map(&part)
     .into_iter()
     .filter(|part| !part.is_empty())
     .collect::<Vec<_>>()
-    .join(" ")
+    .join(" ");
+    match name.is_empty() {
+        true => part(Field::Company),
+        false => name,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +187,12 @@ pub struct Card {
 }
 
 impl Card {
+    pub fn new(uid: &str) -> Self {
+        let bytes =
+            format!("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:;;;;\r\nFN:\r\nEND:VCARD\r\n");
+        Self::parse(bytes.as_bytes()).expect("template is a valid card")
+    }
+
     pub fn parse(bytes: &[u8]) -> Result<Self, Defect> {
         let lines = line::split(bytes).ok_or(Defect::InvalidUtf8)?;
         let mut content = lines.iter().filter(|l| !l.is_blank());
