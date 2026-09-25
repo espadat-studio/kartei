@@ -100,7 +100,9 @@ impl App {
         let form = self.form.as_mut().expect("edit mode has a form");
         match key.code {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => self.save(index),
-            KeyCode::Esc if form.apply(&self.cards[index].1) != self.cards[index].1 => {
+            KeyCode::Esc
+                if form.apply(&self.cards[index].1).as_ref() != Ok(&self.cards[index].1) =>
+            {
                 self.mode = Mode::Discard
             }
             KeyCode::Esc => self.close_form(),
@@ -118,11 +120,18 @@ impl App {
 
     fn save(&mut self, index: usize) {
         let (path, card) = &self.cards[index];
-        let edited = self
+        let edited = match self
             .form
             .as_ref()
             .expect("edit mode has a form")
-            .apply(card);
+            .apply(card)
+        {
+            Ok(edited) => edited,
+            Err(err) => {
+                self.error = Some(err);
+                return;
+            }
+        };
         if edited != *card
             && let Err(err) = vdir::save(path, &edited.to_bytes())
         {

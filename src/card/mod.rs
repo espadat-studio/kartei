@@ -82,6 +82,7 @@ impl Field {
 pub enum Kind {
     Phone,
     Email,
+    Address,
 }
 
 impl Kind {
@@ -89,8 +90,57 @@ impl Kind {
         match self {
             Self::Phone => "TEL",
             Self::Email => "EMAIL",
+            Self::Address => "ADR",
         }
     }
+
+    fn decode(self, raw: &str) -> Vec<String> {
+        match self {
+            Self::Address => {
+                let parts = line::split_unescaped(raw, ';');
+                ADR_COMPONENTS
+                    .map(|i| parts.get(i).map(|p| line::unescape(p)).unwrap_or_default())
+                    .into()
+            }
+            _ => vec![line::unescape(raw)],
+        }
+    }
+
+    fn encode(self, raw: &str, value: &[String]) -> String {
+        match self {
+            Self::Address => {
+                let updates = ADR_COMPONENTS
+                    .into_iter()
+                    .zip(value.iter().map(String::as_str));
+                replace_components(raw, 7, updates)
+            }
+            _ if line::unescape(raw) == value[0] => raw.to_owned(),
+            _ => line::escape(&value[0]),
+        }
+    }
+}
+
+const ADR_COMPONENTS: [usize; 5] = [2, 5, 3, 4, 6];
+
+fn replace_components<'a>(
+    raw: &str,
+    len: usize,
+    updates: impl IntoIterator<Item = (usize, &'a str)>,
+) -> String {
+    let mut parts: Vec<String> = line::split_unescaped(raw, ';')
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    for (i, value) in updates {
+        if parts.get(i).map(|p| line::unescape(p)).unwrap_or_default() == value {
+            continue;
+        }
+        if parts.len() < len {
+            parts.resize(len, String::new());
+        }
+        parts[i] = line::escape(value);
+    }
+    parts.join(";")
 }
 
 pub fn derived_display_name(part: impl Fn(Field) -> String) -> String {
@@ -185,17 +235,12 @@ impl Card {
             None => (line::escape(value), value.is_empty()),
             Some(i) => {
                 let current = index.map_or("", |index| self.lines[index].value());
-                let mut parts: Vec<String> = line::split_unescaped(current, ';')
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect();
                 let len = if name == "N" { 5 } else { i + 1 };
-                if parts.len() < len {
-                    parts.resize(len, String::new());
-                }
-                parts[i] = line::escape(value);
-                let is_empty = parts.iter().all(String::is_empty);
-                (parts.join(";"), is_empty)
+                let raw = replace_components(current, len, [(i, value)]);
+                let is_empty = line::split_unescaped(&raw, ';')
+                    .iter()
+                    .all(|p| p.is_empty());
+                (raw, is_empty)
             }
         };
         let is_removed =
@@ -210,17 +255,14 @@ impl Card {
     }
 
     pub fn entries(&self, kind: Kind) -> Vec<Labeled<Vec<String>>> {
-        self.labeled(kind.property(), |value| vec![line::unescape(value)])
+        self.labeled(kind.property(), |value| kind.decode(value))
     }
 
     pub fn update(&mut self, kind: Kind, n: usize, value: &[String], label: Option<&str>) {
         let index = self.position(kind, n);
         let property = &self.lines[index];
         let is_relabeled = self.label(property).as_deref() != label;
-        let raw = match line::unescape(property.value()) == value[0] {
-            true => property.value().to_owned(),
-            false => line::escape(&value[0]),
-        };
+        let raw = kind.encode(property.value(), value);
         if !is_relabeled && raw == property.value() {
             return;
         }
@@ -240,7 +282,7 @@ impl Card {
 
     pub fn add(&mut self, kind: Kind, value: &[String], label: Option<&str>) {
         let params = label::retype(&[], label);
-        self.insert(kind.property(), &params, &line::escape(&value[0]));
+        self.insert(kind.property(), &params, &kind.encode("", value));
     }
 
     pub fn remove(&mut self, kind: Kind, n: usize) {
@@ -252,6 +294,31 @@ impl Card {
             None => {
                 self.lines.remove(index);
             }
+        }
+    }
+
+    pub fn set_birthday(&mut self, birthday: Option<&Birthday>) {
+        if self.birthday().as_ref() == birthday {
+            return;
+        }
+        let index = self
+            .lines
+            .iter()
+            .position(|l| l.name().eq_ignore_ascii_case("BDAY"));
+        match (birthday, index) {
+            (None, Some(index)) => {
+                self.lines.remove(index);
+            }
+            (Some(&Birthday::Date { year, month, day }), _) => {
+                let is_v4 = self.values("VERSION").next() == Some("4.0");
+                let existing = index.map(|i| (self.lines[i].params(), self.lines[i].value()));
+                let (params, value) = bday::write(year, month, day, existing, is_v4);
+                match index {
+                    Some(i) => self.lines[i] = self.lines[i].with(&params, &value),
+                    None => self.insert("BDAY", &params, &value),
+                }
+            }
+            (None, None) | (Some(Birthday::Invalid(_)), _) => {}
         }
     }
 

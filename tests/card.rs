@@ -313,3 +313,52 @@ fn labels_cycle_through_home_work_cell_other() {
     assert_eq!(card::next_label(Some("cell")), "other");
     assert_eq!(card::next_label(Some("other")), "home");
 }
+
+#[test]
+fn birthdays_are_written_in_the_cards_existing_form() {
+    let date = |year, month, day| Birthday::Date { year, month, day };
+    for (bday, birthday, expected) in [
+        ("", date(Some(1985), 7, 4), "BDAY:1985-07-04"),
+        ("VERSION:4.0", date(Some(1985), 7, 4), "BDAY:19850704"),
+        ("VERSION:4.0", date(None, 3, 15), "BDAY:--0315"),
+        (
+            "",
+            date(None, 3, 15),
+            "BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-15",
+        ),
+        ("BDAY:19850704", date(Some(1990), 1, 2), "BDAY:19900102"),
+        (
+            "BDAY:1985-07-04T00:00:00Z",
+            date(Some(1985), 7, 5),
+            "BDAY:1985-07-05T00:00:00Z",
+        ),
+        ("BDAY:--03-15", date(None, 4, 1), "BDAY:--04-01"),
+        (
+            "BDAY:1985-07-04",
+            date(None, 7, 4),
+            "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-04",
+        ),
+        (
+            "BDAY;x-apple-omit-year=1900:1900-03-15",
+            date(None, 4, 1),
+            "BDAY;x-apple-omit-year=1900:1900-04-01",
+        ),
+    ] {
+        let mut card =
+            Card::parse(format!("BEGIN:VCARD\r\n{bday}\r\nEND:VCARD\r\n").as_bytes()).unwrap();
+        card.set_birthday(Some(&birthday));
+        let bytes = String::from_utf8(card.to_bytes()).unwrap();
+        assert!(
+            bytes.contains(&format!("{expected}\r\n")),
+            "{bday:?}: {bytes}"
+        );
+        assert_eq!(card.birthday(), Some(birthday), "{bday:?}");
+    }
+}
+
+#[test]
+fn clearing_a_birthday_removes_its_line() {
+    let mut card = fixture("apple-omit-year.vcf");
+    card.set_birthday(None);
+    assert!(!card.lines().iter().any(|l| l.name() == "BDAY"));
+}

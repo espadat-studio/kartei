@@ -630,9 +630,7 @@ fn multi_line_note_and_non_ascii_text_round_trip_through_the_form() {
     type_text(&mut app, "Zeile 1");
     press(&mut app, KeyCode::Enter);
     type_text(&mut app, "Grüße, 日本");
-    for _ in 0..7 {
-        press(&mut app, KeyCode::Up);
-    }
+    focus(&mut app, "Family name");
     for _ in "Adams".chars() {
         press(&mut app, KeyCode::Backspace);
     }
@@ -748,6 +746,17 @@ fn tab(app: &mut App, times: usize) {
 
 const FIRST_VALUE: usize = 8;
 
+fn focus(app: &mut App, label: &str) {
+    for _ in 0..100 {
+        let form = app.form().unwrap();
+        if form.rows()[form.focus()].label == label {
+            return;
+        }
+        press(app, KeyCode::Tab);
+    }
+    panic!("no {label:?} row in the form");
+}
+
 fn open_fixture(test: &str, name: &str) -> (PathBuf, String, App) {
     let original = fs::read_to_string(fixtures_dir().join(name)).unwrap();
     let dir = address_book(test, &[(name, &original)]);
@@ -846,5 +855,191 @@ fn clearing_a_phone_removes_its_line() {
     assert_eq!(
         fs::read_to_string(dir.join("anna.vcf")).unwrap(),
         ANNA.replace("TEL:+1 555 0002\r\n", "")
+    );
+}
+
+const BIRTHDAY: usize = FIRST_VALUE + 7;
+
+fn set_birthday(app: &mut App, old: &str, new: &str) {
+    press(app, KeyCode::Char('e'));
+    tab(app, BIRTHDAY);
+    for _ in old.chars() {
+        press(app, KeyCode::Backspace);
+    }
+    type_text(app, new);
+    save(app);
+}
+
+#[test]
+fn a_new_yearless_birthday_uses_the_apple_form_on_3_0_and_dashes_on_4_0() {
+    let v4 = ANNA
+        .replace("VERSION:3.0", "VERSION:4.0")
+        .replace("Anna", "Bea");
+    let dir = address_book("bday-new", &[("anna.vcf", ANNA), ("anna4.vcf", &v4)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    set_birthday(&mut app, "", "--03-15");
+    press(&mut app, KeyCode::Char('j'));
+    set_birthday(&mut app, "", "--03-15");
+
+    let bday = |file: &str| {
+        let card = fs::read_to_string(dir.join(file)).unwrap();
+        card.lines()
+            .find(|l| l.starts_with("BDAY"))
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(bday("anna.vcf"), "BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-15");
+    assert_eq!(bday("anna4.vcf"), "BDAY:--0315");
+}
+
+#[test]
+fn editing_a_birthday_keeps_the_cards_existing_form() {
+    for (fixture, old, new, before, after) in [
+        (
+            "apple-omit-year.vcf",
+            "--03-15",
+            "--04-01",
+            "BDAY;X-APPLE-OMIT-YEAR=1604;VALUE=date:1604-03-15",
+            "BDAY;X-APPLE-OMIT-YEAR=1604;VALUE=date:1604-04-01",
+        ),
+        (
+            "v4-yearless.vcf",
+            "--03-15",
+            "--04-01",
+            "BDAY:--0315",
+            "BDAY:--0401",
+        ),
+        (
+            "fn-custom.vcf",
+            "1985-07-04",
+            "1990-12-31",
+            "BDAY:1985-07-04",
+            "BDAY:1990-12-31",
+        ),
+        (
+            "apple-omit-year.vcf",
+            "--03-15",
+            "1970-03-15",
+            "BDAY;X-APPLE-OMIT-YEAR=1604;VALUE=date:1604-03-15",
+            "BDAY;VALUE=date:1970-03-15",
+        ),
+    ] {
+        let (path, original, mut app) = open_fixture("bday-keep", fixture);
+        set_birthday(&mut app, old, new);
+        assert_eq!(app.mode(), Mode::Browse, "{fixture}: {:?}", app.error());
+        assert_eq!(
+            fs::read_to_string(path).unwrap(),
+            original.replace(before, after),
+            "{fixture}"
+        );
+    }
+}
+
+#[test]
+fn clearing_a_birthday_removes_it_and_an_invalid_one_keeps_the_form_open() {
+    let (path, original, mut app) = open_fixture("bday-clear", "fn-custom.vcf");
+    set_birthday(&mut app, "1985-07-04", "July 4th");
+    assert_eq!(app.mode(), Mode::Edit);
+    assert!(
+        app.error().unwrap().contains("birthday"),
+        "{:?}",
+        app.error()
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), original);
+
+    for _ in "July 4th".chars() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    save(&mut app);
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        original.replace("BDAY:1985-07-04\r\n", "")
+    );
+}
+
+#[test]
+fn an_unreadable_birthday_is_read_only_in_the_form() {
+    let dir = address_book(
+        "bday-read-only",
+        &[("x.vcf", &ANNA.replace("END", "BDAY:spring\r\nEND"))],
+    );
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    set_birthday(&mut app, "spring", "--01-01");
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(
+        fs::read_to_string(dir.join("x.vcf"))
+            .unwrap()
+            .contains("BDAY:spring\r\n")
+    );
+}
+
+const STREET: usize = FIRST_VALUE + 2;
+
+#[test]
+fn editing_an_address_city_keeps_hidden_components_and_the_apple_country_code() {
+    for (fixture, old, new, before, after) in [
+        (
+            "escaped-adr.vcf",
+            "Berlin",
+            "Potsdam",
+            ";Berlin;Berlin;10115;",
+            ";Potsdam;Berlin;10115;",
+        ),
+        (
+            "apple-grouped-labels.vcf",
+            "Madrid",
+            "Sevilla",
+            "Calle Mayor 1;Madrid;",
+            "Calle Mayor 1;Sevilla;",
+        ),
+    ] {
+        let (path, original, mut app) = open_fixture("adr-city", fixture);
+        press(&mut app, KeyCode::Char('e'));
+        focus(&mut app, "City");
+        for _ in old.chars() {
+            press(&mut app, KeyCode::Backspace);
+        }
+        type_text(&mut app, new);
+        save(&mut app);
+        let written = fs::read_to_string(path).unwrap();
+        assert_eq!(
+            written.replace("\r\n ", ""),
+            original.replace(before, after),
+            "{fixture}"
+        );
+        assert!(written.lines().all(|l| l.len() <= 76), "{written}");
+    }
+}
+
+#[test]
+fn a_two_line_street_round_trips_with_its_escaped_newline() {
+    let dir = address_book("adr-street", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, STREET);
+    type_text(&mut app, "Main St 1");
+    press(&mut app, KeyCode::Enter);
+    type_text(&mut app, "Apt 2");
+    tab(&mut app, 2);
+    type_text(&mut app, "Springfield");
+    alt(&mut app, 'l');
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace(
+            "END:VCARD",
+            "ADR;TYPE=HOME:;;Main St 1\\nApt 2;Springfield;;;\r\nEND:VCARD"
+        )
+    );
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    assert_eq!(
+        app.selected_card().unwrap().addresses()[0].value.street,
+        "Main St 1\nApt 2"
+    );
+    press(&mut app, KeyCode::Char('e'));
+    assert_shows(
+        &detail(&screen(&app)),
+        &["Street", "Main St 1", "Apt 2", "(home)"],
     );
 }

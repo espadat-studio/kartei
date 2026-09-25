@@ -1,6 +1,6 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::card::{self, Card, Field, Kind};
+use crate::card::{self, Birthday, Card, Field, Kind};
 use crate::input::Input;
 
 pub const FIELDS: [(Field, &str); 9] = [
@@ -15,12 +15,20 @@ pub const FIELDS: [(Field, &str); 9] = [
     (Field::Note, "Note"),
 ];
 
-const KINDS: [(Kind, &[&str]); 2] = [(Kind::Phone, &["Phone"]), (Kind::Email, &["Email"])];
+const KINDS: [(Kind, &[&str]); 3] = [
+    (Kind::Phone, &["Phone"]),
+    (Kind::Email, &["Email"]),
+    (
+        Kind::Address,
+        &["Street", "Postal code", "City", "Region", "Country"],
+    ),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Slot {
     Field(usize),
     Value(usize, usize),
+    Birthday,
 }
 
 struct Entry {
@@ -59,6 +67,9 @@ pub struct Form {
     fields: Vec<Input>,
     entries: Vec<Entry>,
     removed: Vec<(Kind, usize)>,
+    birthday: Input,
+    loaded_birthday: String,
+    is_birthday_read_only: bool,
     focus: usize,
     is_linked: bool,
 }
@@ -78,10 +89,15 @@ impl Form {
                 inputs: e.value.into_iter().map(Input::new).collect(),
             }));
         }
+        let birthday = card.birthday();
+        let loaded_birthday = birthday.as_ref().map(Birthday::to_iso).unwrap_or_default();
         Self {
             fields: FIELDS.map(|(field, _)| Input::new(card.get(field))).into(),
             entries,
             removed: Vec::new(),
+            birthday: Input::new(loaded_birthday.clone()),
+            loaded_birthday,
+            is_birthday_read_only: birthday.is_some_and(|b| b.is_read_only()),
             focus: 0,
             is_linked: card.display_name() == card::derived_display_name(|f| card.get(f)),
         }
@@ -106,7 +122,13 @@ impl Form {
     }
 
     fn type_key(&mut self, key: KeyEvent, slot: Slot) {
-        let is_multiline = slot == Slot::Field(index_of(Field::Note));
+        if slot == Slot::Birthday && self.is_birthday_read_only {
+            return;
+        }
+        let is_multiline = match slot {
+            Slot::Value(e, 0) => self.entries[e].kind == Kind::Address,
+            slot => slot == Slot::Field(index_of(Field::Note)),
+        };
         let input = self.input_mut(slot);
         let before = input.text().to_owned();
         match key.code {
@@ -178,7 +200,7 @@ impl Form {
         (0..note)
             .map(Slot::Field)
             .chain(values)
-            .chain([Slot::Field(note)])
+            .chain([Slot::Birthday, Slot::Field(note)])
             .collect()
     }
 
@@ -186,6 +208,7 @@ impl Form {
         match slot {
             Slot::Field(i) => &self.fields[i],
             Slot::Value(e, c) => &self.entries[e].inputs[c],
+            Slot::Birthday => &self.birthday,
         }
     }
 
@@ -193,13 +216,22 @@ impl Form {
         match slot {
             Slot::Field(i) => &mut self.fields[i],
             Slot::Value(e, c) => &mut self.entries[e].inputs[c],
+            Slot::Birthday => &mut self.birthday,
         }
     }
 
-    pub fn apply(&self, card: &Card) -> Card {
+    pub fn apply(&self, card: &Card) -> Result<Card, String> {
         let mut card = card.clone();
         for ((field, _), input) in FIELDS.iter().zip(&self.fields) {
             card.set(*field, input.text());
+        }
+        let birthday = self.birthday.text();
+        if birthday != self.loaded_birthday {
+            let birthday = match birthday {
+                "" => None,
+                text => Some(Birthday::from_iso(text).ok_or(BIRTHDAY_ERROR)?),
+            };
+            card.set_birthday(birthday.as_ref());
         }
         let mut removed = self.removed.clone();
         for entry in &self.entries {
@@ -218,7 +250,7 @@ impl Form {
                 card.add(entry.kind, &entry.values(), entry.label.as_deref());
             }
         }
-        card
+        Ok(card)
     }
 
     pub fn rows(&self) -> Vec<Row<'_>> {
@@ -239,6 +271,16 @@ impl Form {
                         let label = entry.label.as_ref().filter(|_| c == 0);
                         (components(entry.kind)[c], label.map(|l| format!("({l})")))
                     }
+                    Slot::Birthday if self.is_birthday_read_only => {
+                        ("Birthday", Some("(read-only)".to_owned()))
+                    }
+                    Slot::Birthday => (
+                        "Birthday",
+                        self.birthday
+                            .text()
+                            .is_empty()
+                            .then(|| BIRTHDAY_FORMAT.to_owned()),
+                    ),
                 };
                 Row {
                     label,
@@ -257,6 +299,9 @@ impl Form {
         self.is_linked
     }
 }
+
+const BIRTHDAY_FORMAT: &str = "(YYYY-MM-DD or --MM-DD)";
+const BIRTHDAY_ERROR: &str = "invalid birthday: use YYYY-MM-DD or --MM-DD";
 
 fn components(kind: Kind) -> &'static [&'static str] {
     KINDS

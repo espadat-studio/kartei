@@ -42,7 +42,7 @@ Typing filters the list live. The match is a case-insensitive substring of the d
 | `Ctrl-s`            | Save                                 |
 | `Esc`               | Cancel (asks first if changed)       |
 
-In the note field, `Enter` inserts a newline.
+In the note and street fields, `Enter` inserts a newline. Birthdays are typed as `YYYY-MM-DD`, or `--MM-DD` without a year.
 
 ## Prompts
 
