@@ -9,7 +9,7 @@ pub fn load(dir: &Path) -> io::Result<Vec<Card>> {
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
         if path.extension().is_some_and(|ext| ext == "vcf") {
-            cards.push(Card::parse(&fs::read(&path)?));
+            cards.extend(Card::parse(&fs::read(&path)?).ok());
         }
     }
     Ok(cards)

@@ -18,14 +18,23 @@ fn every_fixture_round_trips_byte_for_byte() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
+        if path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("bad-")
+        {
+            continue;
+        }
         let bytes = fs::read(&path).unwrap();
-        assert_eq!(Card::parse(&bytes).to_bytes(), bytes, "{}", path.display());
+        let card = Card::parse(&bytes).unwrap();
+        assert_eq!(card.to_bytes(), bytes, "{}", path.display());
     }
 }
 
 #[test]
 fn folded_photo_card_reads_its_fields() {
-    let card = Card::parse(&fixture("folded-photo.vcf"));
+    let card = Card::parse(&fixture("folded-photo.vcf")).unwrap();
     assert_eq!(card.display_name(), "Paula Photo");
     assert_eq!(card.phones()[0].value, "+49 170 1234567");
     let photo = card.lines().iter().find(|l| l.name() == "PHOTO").unwrap();
@@ -35,7 +44,7 @@ fn folded_photo_card_reads_its_fields() {
 
 #[test]
 fn lf_card_reads_its_fields() {
-    let card = Card::parse(&fixture("lf-endings.vcf"));
+    let card = Card::parse(&fixture("lf-endings.vcf")).unwrap();
     assert_eq!(card.display_name(), "Lena Linefeed");
     assert_eq!(card.structured_name(), ("Linefeed".into(), "Lena".into()));
     assert_eq!(card.emails()[0].value, "lena@example.org");
@@ -44,7 +53,7 @@ fn lf_card_reads_its_fields() {
 
 #[test]
 fn fold_inside_a_utf8_character_unfolds_to_valid_text() {
-    let card = Card::parse(&fixture("utf8-fold-midchar.vcf"));
+    let card = Card::parse(&fixture("utf8-fold-midchar.vcf")).unwrap();
     assert!(card.display_name().ends_with("äöü äöü"));
     assert_eq!(
         card.structured_name(),
@@ -56,14 +65,15 @@ fn fold_inside_a_utf8_character_unfolds_to_valid_text() {
 fn escaped_name_components_are_split_and_unescaped() {
     let card = Card::parse(
         b"BEGIN:VCARD\r\nN:Doe\\; Jr;Jane\\, Q;;;\r\nFN:Jane\\, Q Doe\r\nEND:VCARD\r\n",
-    );
+    )
+    .unwrap();
     assert_eq!(card.structured_name(), ("Doe; Jr".into(), "Jane, Q".into()));
     assert_eq!(card.display_name(), "Jane, Q Doe");
 }
 
 #[test]
 fn property_names_match_case_insensitively() {
-    let card = Card::parse(b"BEGIN:VCARD\r\nitem1.tel:123\r\nfn:x\r\nEND:VCARD\r\n");
+    let card = Card::parse(b"BEGIN:VCARD\r\nitem1.tel:123\r\nfn:x\r\nEND:VCARD\r\n").unwrap();
     assert_eq!(card.phones()[0].value, "123");
     assert_eq!(card.display_name(), "x");
 }
@@ -151,7 +161,7 @@ proptest! {
         }
         bytes.extend_from_slice(b"END:VCARD\r\n");
 
-        let card = Card::parse(&bytes);
+        let card = Card::parse(&bytes).unwrap();
         prop_assert_eq!(card.to_bytes(), bytes.clone());
 
         let parsed = &card.lines()[1..card.lines().len() - 1];

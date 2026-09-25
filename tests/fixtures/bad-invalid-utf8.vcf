@@ -1,0 +1,5 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:bad-invalid-utf8
+FN:Bad ÿþ Bytes
+END:VCARD
