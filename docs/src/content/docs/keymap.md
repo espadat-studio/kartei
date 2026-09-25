@@ -46,7 +46,7 @@ In the note field, `Enter` inserts a newline.
 
 ## Prompts
 
-A prompt asks one question and waits for a key. Cancelling an edit with unsaved changes asks to confirm. A failed save shows the error in red and keeps the form open.
+A prompt asks one question and waits for a key. Cancelling an edit with unsaved changes asks to confirm: `y` discards, `n` or `Esc` keeps editing. A failed save shows the error in red and keeps the form open.
 
 When a save finds the file changed or deleted on disk, kartei keeps your edit and asks:
 

@@ -1,13 +1,16 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Margin};
-use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
+use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 
 use crate::app::{App, Mode};
-use crate::card::Card;
+use crate::card::{Card, Field};
+use crate::form::{FIELDS, Form};
 
-const HINTS: &str = " j/k move  g/G top/bottom  / search  ? help  q quit";
+const HINTS: &str = " j/k move  / search  e edit  ? help  q quit";
+const EDIT_HINTS: &str = " Tab/S-Tab move  Ctrl-s save  Esc cancel";
+const LABEL_WIDTH: u16 = 13;
 
 const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
@@ -16,6 +19,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("j/k Down/Up", "move"),
             ("g/G", "top/bottom"),
             ("/", "search"),
+            ("e/Enter", "edit card"),
             ("!", "list skipped cards"),
             ("?", "show keys"),
             ("q", "quit"),
@@ -30,8 +34,15 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("Esc", "clear filter"),
         ],
     ),
-    ("Prompt", &[("any key", "close")]),
-    ("Help", &[("any key", "close")]),
+    (
+        "Edit",
+        &[
+            ("Tab/S-Tab", "next/previous field"),
+            ("Ctrl-s", "save"),
+            ("Esc", "cancel"),
+        ],
+    ),
+    ("Prompt, Help", &[("any key", "close")]),
 ];
 
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -54,20 +65,70 @@ pub fn draw(frame: &mut Frame, app: &App) {
         &mut state,
     );
 
-    let lines = app.selected_card().map(details).unwrap_or_default();
-    frame.render_widget(Paragraph::new(lines).block(Block::bordered()), detail);
+    match app.form() {
+        Some(form) => draw_form(frame, form, detail),
+        None => {
+            let lines = app.selected_card().map(details).unwrap_or_default();
+            frame.render_widget(Paragraph::new(lines).block(Block::bordered()), detail);
+        }
+    }
     let hints = match app.mode() {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
+        Mode::Edit => EDIT_HINTS.to_owned(),
+        Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
         _ => HINTS.to_owned(),
     };
-    frame.render_widget(Paragraph::new(hints), status);
+    let hints = match app.error() {
+        Some(error) => Paragraph::new(format!(" {error}")).style(Color::Red),
+        None => Paragraph::new(hints),
+    };
+    frame.render_widget(hints, status);
     if let Some(skipped) = skipped_count(app.skipped().len()) {
         frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
     }
     match app.mode() {
         Mode::Prompt => draw_overlay(frame, "Skipped cards", skipped(app)),
         Mode::Help => draw_overlay(frame, "Keys", keymap()),
-        Mode::Browse | Mode::Search => {}
+        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard => {}
+    }
+}
+
+fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
+    let mut lines = Vec::new();
+    let mut cursor = None;
+    for (i, ((field, label), input)) in FIELDS.iter().zip(form.inputs()).enumerate() {
+        let style = match i == form.focus() {
+            true => Style::new().add_modifier(Modifier::BOLD),
+            false => Style::new(),
+        };
+        if i == form.focus() {
+            let (row, col) = input.cursor();
+            let y = area.y + 1 + lines.len() as u16 + row;
+            cursor = Some(Position::new(area.x + 1 + LABEL_WIDTH + col, y));
+        }
+        for (row, text) in input.text().split('\n').enumerate() {
+            let label = if row == 0 { label } else { "" };
+            let mut line = Line::from(vec![
+                Span::styled(format!("{label:<12} "), style),
+                Span::raw(text.to_owned()),
+            ]);
+            if *field == Field::DisplayName {
+                let link = if form.is_linked() {
+                    "  (linked)"
+                } else {
+                    "  (custom)"
+                };
+                line.push_span(Span::styled(link, Modifier::DIM));
+            }
+            lines.push(line);
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Edit")),
+        area,
+    );
+    if let Some(cursor) = cursor {
+        frame.set_cursor_position(cursor);
     }
 }
 

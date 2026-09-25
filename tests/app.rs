@@ -6,7 +6,7 @@ use kartei::vdir::AddressBook;
 use kartei::{ui, vdir};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 fn address_book(test: &str, cards: &[(&str, &str)]) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("kartei-{test}-{}", std::process::id()));
@@ -530,5 +530,172 @@ fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
         !screen_of_width(&app, 80)
             .join("\n")
             .contains("clear filter")
+    );
+}
+
+fn save(app: &mut App) {
+    app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+}
+
+fn replace_given_name(app: &mut App, old: &str, new: &str) {
+    press(app, KeyCode::Tab);
+    for _ in old.chars() {
+        press(app, KeyCode::Backspace);
+    }
+    type_text(app, new);
+}
+
+const ANNA: &str = "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Adams;Anna;;;\r\nFN:Anna Adams\r\nTEL:+1 555 0002\r\nEND:VCARD\r\n";
+
+#[test]
+fn saving_an_edited_given_name_rewrites_only_n_and_a_linked_display_name() {
+    let dir = address_book("edit-linked", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(app.mode(), Mode::Edit);
+    assert_shows(&detail(&screen(&app)), &["Given name", "Anna", "(linked)"]);
+
+    replace_given_name(&mut app, "Anna", "Hanna");
+    assert_shows(&detail(&screen(&app)), &["Hanna Adams", "(linked)"]);
+    save(&mut app);
+
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Adams;Hanna;;;\r\nFN:Hanna Adams\r\nTEL:+1 555 0002\r\nEND:VCARD\r\n"
+    );
+    assert_eq!(listed(&app), ["Hanna Adams"]);
+    assert!(!fs::read_dir(&dir).unwrap().any(|e| {
+        e.unwrap()
+            .path()
+            .extension()
+            .is_some_and(|ext| ext == "tmp")
+    }));
+}
+
+#[test]
+fn editing_the_structured_name_leaves_a_custom_display_name_unchanged() {
+    let original = fs::read_to_string(fixtures_dir().join("fn-custom.vcf")).unwrap();
+    let dir = address_book("edit-custom", &[("johnny.vcf", &original)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Enter);
+    assert_shows(&detail(&screen(&app)), &["Johnny D.", "(custom)"]);
+
+    replace_given_name(&mut app, "Jonathan", "John");
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(dir.join("johnny.vcf")).unwrap(),
+        original.replace("N:Doe;Jonathan;;;", "N:Doe;John;;;")
+    );
+    assert_eq!(listed(&app), ["Johnny D."]);
+}
+
+#[test]
+fn esc_with_unsaved_changes_asks_before_discarding_and_writes_nothing() {
+    let dir = address_book("edit-discard", &[("anna.vcf", ANNA)]);
+    let before = snapshot(&dir);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+
+    press(&mut app, KeyCode::Char('e'));
+    type_text(&mut app, "Dr.");
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Discard);
+    assert!(
+        screen(&app)
+            .last()
+            .unwrap()
+            .contains("Discard unsaved changes? y/n")
+    );
+    press(&mut app, KeyCode::Char('n'));
+    assert_eq!(app.mode(), Mode::Edit);
+    assert!(detail(&screen(&app)).contains("Dr."));
+
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(!detail(&screen(&app)).contains("Dr."));
+    assert_eq!(snapshot(&dir), before);
+}
+
+#[test]
+fn multi_line_note_and_non_ascii_text_round_trip_through_the_form() {
+    let dir = address_book("edit-note", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    press(&mut app, KeyCode::BackTab);
+    type_text(&mut app, "Zeile 1");
+    press(&mut app, KeyCode::Enter);
+    type_text(&mut app, "Grüße, 日本");
+    for _ in 0..5 {
+        press(&mut app, KeyCode::Up);
+    }
+    for _ in "Adams".chars() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    type_text(&mut app, "Østergård");
+    save(&mut app);
+
+    let written = fs::read_to_string(dir.join("anna.vcf")).unwrap();
+    assert!(
+        written.contains("N:Østergård;Anna;;;\r\nFN:Anna Østergård\r\n"),
+        "{written}"
+    );
+    assert!(
+        written.ends_with("NOTE:Zeile 1\\nGrüße\\, 日本\r\nEND:VCARD\r\n"),
+        "{written}"
+    );
+
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    let card = app.selected_card().unwrap();
+    assert_eq!(card.note().as_deref(), Some("Zeile 1\nGrüße, 日本"));
+    assert_eq!(card.display_name(), "Anna Østergård");
+    press(&mut app, KeyCode::Char('e'));
+    assert_shows(
+        &detail(&screen(&app)),
+        &["Østergård", "Anna Østergård", "Zeile 1", "Grüße, 日"],
+    );
+}
+
+#[test]
+fn failed_save_shows_the_error_and_keeps_the_form_open() {
+    let dir = address_book("edit-fail", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    fs::remove_dir_all(&dir).unwrap();
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Anna", "Hanna");
+    save(&mut app);
+
+    assert_eq!(app.mode(), Mode::Edit);
+    assert!(app.error().unwrap().starts_with("save failed"));
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    let status = terminal.backend().buffer()[(1, 23)].clone();
+    assert_eq!(
+        (status.symbol(), status.fg),
+        ("s", ratatui::style::Color::Red)
+    );
+    assert!(detail(&screen(&app)).contains("Hanna"));
+}
+
+#[test]
+fn cursor_sits_after_wide_characters_in_the_focused_input() {
+    let dir = address_book("edit-cursor", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    press(&mut app, KeyCode::Tab);
+    type_text(&mut app, "日本");
+    press(&mut app, KeyCode::Left);
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, &app)).unwrap();
+    let detail_x = 32;
+    let label = 13;
+    let anna_ri_cells = 6;
+    assert_eq!(
+        terminal.get_cursor_position().unwrap(),
+        ratatui::layout::Position::new(detail_x + 1 + label + anna_ri_cells, 2)
     );
 }

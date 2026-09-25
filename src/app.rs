@@ -1,30 +1,37 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use std::path::PathBuf;
+
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::card::Card;
-use crate::vdir::{AddressBook, Skipped};
+use crate::form::Form;
+use crate::vdir::{self, AddressBook, Skipped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Browse,
     Search,
+    Edit,
+    Discard,
     Prompt,
     Help,
 }
 
 pub struct App {
-    cards: Vec<Card>,
+    cards: Vec<(PathBuf, Card)>,
     skipped: Vec<Skipped>,
     query: String,
     visible: Vec<usize>,
     selected: usize,
     mode: Mode,
+    form: Option<Form>,
+    error: Option<String>,
     should_quit: bool,
 }
 
 impl App {
     pub fn new(book: AddressBook) -> Self {
         let AddressBook { mut cards, skipped } = book;
-        cards.sort_by_cached_key(sort_key);
+        cards.sort_by_cached_key(|(_, card)| sort_key(card));
         Self {
             visible: (0..cards.len()).collect(),
             cards,
@@ -32,6 +39,8 @@ impl App {
             query: String::new(),
             selected: 0,
             mode: Mode::Browse,
+            form: None,
+            error: None,
             should_quit: false,
         }
     }
@@ -40,6 +49,8 @@ impl App {
         match self.mode {
             Mode::Browse => self.browse(key),
             Mode::Search => self.search(key),
+            Mode::Edit => self.edit(key),
+            Mode::Discard => self.discard(key),
             Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
         }
     }
@@ -52,6 +63,7 @@ impl App {
             KeyCode::Char('g') => self.selected = 0,
             KeyCode::Char('G') => self.selected = last,
             KeyCode::Char('/') => self.mode = Mode::Search,
+            KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
             KeyCode::Char('q') => self.should_quit = true,
@@ -72,13 +84,66 @@ impl App {
             }
             _ => return,
         }
-        self.filter();
+        self.filter(self.visible.get(self.selected).copied());
     }
 
-    fn filter(&mut self) {
-        let current = self.visible.get(self.selected).copied();
+    fn open_form(&mut self) {
+        if let Some(card) = self.selected_card() {
+            self.form = Some(Form::new(card));
+            self.mode = Mode::Edit;
+        }
+    }
+
+    fn edit(&mut self, key: KeyEvent) {
+        let index = self.visible[self.selected];
+        let form = self.form.as_mut().expect("edit mode has a form");
+        match key.code {
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => self.save(index),
+            KeyCode::Esc if form.apply(&self.cards[index].1) != self.cards[index].1 => {
+                self.mode = Mode::Discard
+            }
+            KeyCode::Esc => self.close_form(),
+            _ => form.handle_key(key),
+        }
+    }
+
+    fn discard(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y') => self.close_form(),
+            KeyCode::Char('n') | KeyCode::Esc => self.mode = Mode::Edit,
+            _ => {}
+        }
+    }
+
+    fn save(&mut self, index: usize) {
+        let (path, card) = &self.cards[index];
+        let edited = self
+            .form
+            .as_ref()
+            .expect("edit mode has a form")
+            .apply(card);
+        if edited != *card
+            && let Err(err) = vdir::save(path, &edited.to_bytes())
+        {
+            self.error = Some(format!("save failed: {err}"));
+            return;
+        }
+        let path = path.clone();
+        self.cards[index].1 = edited;
+        self.close_form();
+        self.cards.sort_by_cached_key(|(_, card)| sort_key(card));
+        self.filter(self.cards.iter().position(|(p, _)| *p == path));
+    }
+
+    fn close_form(&mut self) {
+        self.form = None;
+        self.error = None;
+        self.mode = Mode::Browse;
+    }
+
+    fn filter(&mut self, current: Option<usize>) {
         self.visible = (0..self.cards.len())
-            .filter(|&i| is_match(&self.cards[i], &self.query))
+            .filter(|&i| is_match(&self.cards[i].1, &self.query))
             .collect();
         self.selected = current
             .and_then(|card| self.visible.iter().position(|&i| i == card))
@@ -86,7 +151,7 @@ impl App {
     }
 
     pub fn cards(&self) -> Vec<&Card> {
-        self.visible.iter().map(|&i| &self.cards[i]).collect()
+        self.visible.iter().map(|&i| &self.cards[i].1).collect()
     }
 
     pub fn skipped(&self) -> &[Skipped] {
@@ -102,7 +167,15 @@ impl App {
     }
 
     pub fn selected_card(&self) -> Option<&Card> {
-        self.visible.get(self.selected).map(|&i| &self.cards[i])
+        self.visible.get(self.selected).map(|&i| &self.cards[i].1)
+    }
+
+    pub fn form(&self) -> Option<&Form> {
+        self.form.as_ref()
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
     }
 
     pub fn mode(&self) -> Mode {
