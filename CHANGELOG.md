@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0](https://github.com/espadat-studio/kartei/compare/v0.0.1...v1.0.0) - 2026-09-25
+
+### Added
+
+- raw edit a card in $EDITOR ([#49](https://github.com/espadat-studio/kartei/pull/49))
+- delete a card ([#48](https://github.com/espadat-studio/kartei/pull/48))
+- edit urls ([#47](https://github.com/espadat-studio/kartei/pull/47))
+- open a single vcf file as the address book ([#40](https://github.com/espadat-studio/kartei/pull/40))
+- skip a defective card inside a bundle ([#39](https://github.com/espadat-studio/kartei/pull/39))
+- browse and edit cards inside bundles ([#37](https://github.com/espadat-studio/kartei/pull/37))
+
+### Other
+
+- bump version to 1.0.0 ([#50](https://github.com/espadat-studio/kartei/pull/50))
+- document bundles and the thunderbird round trip ([#41](https://github.com/espadat-studio/kartei/pull/41))
+- define bundles and record in-place bundle edits
+
 ## [0.0.1](https://github.com/espadat-studio/kartei/compare/v0.0.0...v0.0.1) - 2026-09-25
 
 ### Added
