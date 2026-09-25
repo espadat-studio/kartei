@@ -334,6 +334,11 @@ fn birthdays_are_written_in_the_cards_existing_form() {
         ),
         ("BDAY:--03-15", date(None, 4, 1), "BDAY:--04-01"),
         (
+            "VERSION:4.0\r\nBDAY:1990-05-01",
+            date(None, 5, 1),
+            "BDAY:--0501",
+        ),
+        (
             "BDAY:1985-07-04",
             date(None, 7, 4),
             "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-04",

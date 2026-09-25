@@ -192,7 +192,8 @@ impl App {
 
     fn save(&mut self) {
         let draft = self.draft.as_ref().expect("edit mode has a draft");
-        if draft.is_new {
+        let is_edited = draft.edited().is_ok_and(|edited| edited != draft.card);
+        if draft.is_new || !is_edited {
             return self.write();
         }
         match vdir::conflict(&draft.path, &draft.card.to_bytes()) {

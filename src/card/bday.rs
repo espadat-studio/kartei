@@ -81,11 +81,12 @@ pub(crate) fn write(
         .strip_prefix("--")
         .or(date.get(4..))
         .unwrap_or_default();
+    let is_apple = omit.is_some() || (!is_v4 && !date.starts_with("--"));
     let is_basic = match date {
         "" => is_v4,
+        _ if year.is_none() && !is_apple && !date.starts_with("--") => true,
         _ => !month_day.contains('-'),
     };
-    let is_apple = omit.is_some() || (!is_v4 && !date.starts_with("--"));
     let sep = if is_basic { "" } else { "-" };
     let month_day = format!("{month:02}{sep}{day:02}");
     let mut kept: Vec<String> = params
@@ -120,8 +121,8 @@ fn is_omit_year(param: &str) -> bool {
 fn omitted_year(params: &[String]) -> Option<&str> {
     params
         .iter()
-        .filter_map(|param| param.split_once('='))
-        .find(|(name, _)| name.eq_ignore_ascii_case("X-APPLE-OMIT-YEAR"))
+        .find(|param| is_omit_year(param))
+        .and_then(|param| param.split_once('='))
         .map(|(_, year)| year)
 }
 

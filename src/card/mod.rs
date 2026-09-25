@@ -126,7 +126,7 @@ impl Kind {
                 let updates = ADR_COMPONENTS
                     .into_iter()
                     .zip(value.iter().map(String::as_str));
-                replace_components(raw, 7, updates)
+                replace_components(raw, ADR_LEN, updates)
             }
             _ if line::unescape(raw) == value[0] => raw.to_owned(),
             _ => line::escape(&value[0]),
@@ -135,6 +135,7 @@ impl Kind {
 }
 
 const ADR_COMPONENTS: [usize; 5] = [2, 5, 3, 4, 6];
+const ADR_LEN: usize = 7;
 
 fn replace_components<'a>(
     raw: &str,
@@ -297,10 +298,8 @@ impl Card {
         let group = property.group().map(str::to_owned);
         self.lines[index] = property.with(&params, &raw);
         if is_relabeled && let Some(group) = group {
-            self.lines.retain(|l| {
-                !(l.name().eq_ignore_ascii_case("X-ABLabel")
-                    && l.group().is_some_and(|g| g.eq_ignore_ascii_case(&group)))
-            });
+            self.lines
+                .retain(|l| !(l.name().eq_ignore_ascii_case("X-ABLabel") && l.is_in(&group)));
         }
     }
 
@@ -312,9 +311,7 @@ impl Card {
     pub fn remove(&mut self, kind: Kind, n: usize) {
         let index = self.position(kind, n);
         match self.lines[index].group().map(str::to_owned) {
-            Some(group) => self
-                .lines
-                .retain(|l| !l.group().is_some_and(|g| g.eq_ignore_ascii_case(&group))),
+            Some(group) => self.lines.retain(|l| !l.is_in(&group)),
             None => {
                 self.lines.remove(index);
             }
@@ -430,10 +427,9 @@ impl Card {
         property
             .group()
             .and_then(|group| {
-                self.lines.iter().find(|l| {
-                    l.name().eq_ignore_ascii_case("X-ABLabel")
-                        && l.group().is_some_and(|g| g.eq_ignore_ascii_case(group))
-                })
+                self.lines
+                    .iter()
+                    .find(|l| l.name().eq_ignore_ascii_case("X-ABLabel") && l.is_in(group))
             })
             .map(|l| label::decode(&line::unescape(l.value())))
             .or_else(|| label::from_types(property.params()))

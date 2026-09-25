@@ -91,6 +91,12 @@ impl ContentLine {
             && self.value.eq_ignore_ascii_case(value)
     }
 
+    pub(crate) fn is_in(&self, group: &str) -> bool {
+        self.group
+            .as_ref()
+            .is_some_and(|g| g.eq_ignore_ascii_case(group))
+    }
+
     pub(crate) fn is_blank(&self) -> bool {
         self.raw.trim_ascii().is_empty()
     }

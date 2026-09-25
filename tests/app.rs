@@ -1264,3 +1264,14 @@ fn esc_closes_the_copy_prompt_without_emitting() {
     assert_eq!(app.take_clipboard(), None);
     assert!(!screen(&app).last().unwrap().contains("copied"));
 }
+
+#[test]
+fn saving_without_edits_closes_the_form_even_if_the_file_changed() {
+    let dir = address_book("conflict-unedited", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    fs::write(dir.join("anna.vcf"), EXTERNAL).unwrap();
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), EXTERNAL);
+}
