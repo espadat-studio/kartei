@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Card, Labeled};
+use kartei::card::{Birthday, Card, Labeled};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -42,4 +42,69 @@ fn values_without_type_or_group_have_no_label() {
     let card = Card::parse(b"BEGIN:VCARD\r\nTEL:1\r\nitem1.EMAIL:a@b\r\nEND:VCARD\r\n");
     assert_eq!(labeled(&card.phones()), [(None, "1")]);
     assert_eq!(labeled(&card.emails()), [(None, "a@b")]);
+}
+
+fn birthday(bday: &str) -> Option<Birthday> {
+    Card::parse(format!("BEGIN:VCARD\r\n{bday}\r\nEND:VCARD\r\n").as_bytes()).birthday()
+}
+
+fn date(year: Option<u16>, month: u8, day: u8) -> Option<Birthday> {
+    Some(Birthday::Date { year, month, day })
+}
+
+#[test]
+fn full_date_birthday_keeps_its_year() {
+    let bday = fixture("fn-custom.vcf").birthday().unwrap();
+    assert_eq!(Some(bday.clone()), date(Some(1985), 7, 4));
+    assert_eq!(bday.to_string(), "4 July 1985");
+    assert!(!bday.is_read_only());
+}
+
+#[test]
+fn apple_omit_year_birthday_has_no_year() {
+    let bday = fixture("apple-omit-year.vcf").birthday().unwrap();
+    assert_eq!(Some(bday.clone()), date(None, 3, 15));
+    assert_eq!(bday.to_string(), "15 March");
+}
+
+#[test]
+fn v4_yearless_birthdays_have_no_year() {
+    assert_eq!(fixture("v4-yearless.vcf").birthday(), date(None, 3, 15));
+    assert_eq!(birthday("BDAY:--03-15"), date(None, 3, 15));
+}
+
+#[test]
+fn other_date_forms_are_read() {
+    assert_eq!(birthday("BDAY:19850704"), date(Some(1985), 7, 4));
+    assert_eq!(
+        birthday("BDAY:1985-07-04T00:00:00Z"),
+        date(Some(1985), 7, 4)
+    );
+    assert_eq!(
+        birthday("BDAY;VALUE=date:2000-02-29"),
+        date(Some(2000), 2, 29)
+    );
+}
+
+#[test]
+fn invalid_birthday_is_raw_and_read_only() {
+    for raw in [
+        "sometime in spring",
+        "1985-13-01",
+        "2001-02-29",
+        "--02-30",
+        "+985-07-04",
+        "--0",
+        "",
+    ] {
+        let bday = birthday(&format!("BDAY:{raw}")).unwrap();
+        assert_eq!(bday, Birthday::Invalid(raw.into()));
+        assert!(bday.is_read_only());
+        assert_eq!(bday.to_string(), raw);
+    }
+}
+
+#[test]
+fn card_without_birthday_has_none() {
+    assert_eq!(fixture("apple-grouped-labels.vcf").birthday(), None);
 }

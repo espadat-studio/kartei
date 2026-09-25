@@ -1,6 +1,8 @@
+mod bday;
 mod label;
 mod line;
 
+pub use bday::Birthday;
 pub use line::ContentLine;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +59,12 @@ impl Card {
 
     pub fn emails(&self) -> Vec<Labeled<String>> {
         self.labeled("EMAIL", line::unescape)
+    }
+
+    pub fn birthday(&self) -> Option<Birthday> {
+        self.properties("BDAY")
+            .next()
+            .map(|l| Birthday::parse(l.value(), l.params()))
     }
 
     fn labeled<T>(&self, name: &str, read: impl Fn(&str) -> T) -> Vec<Labeled<T>> {

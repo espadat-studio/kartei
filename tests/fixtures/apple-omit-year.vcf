@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:apple-omit-year
+N:Ortega;Omar;;;
+FN:Omar Ortega
+BDAY;X-APPLE-OMIT-YEAR=1604;VALUE=date:1604-03-15
+END:VCARD
