@@ -22,6 +22,12 @@ cargo install --git https://github.com/espadat-studio/kartei
 
 kartei reads one flat directory of `.vcf` files, or a single `.vcf` file. Pass it as the only argument:
 
+```text
+kartei <dir-or-file.vcf>
+```
+
+For example:
+
 ```bash
 kartei ~/.local/share/contacts
 ```
@@ -36,6 +42,29 @@ kartei
 A single file, such as a Thunderbird export, works the same way: `kartei Contacts.vcf`. New contacts go after the file's last one, with its line endings. In a directory, each new contact gets its own `<uid>.vcf`.
 
 The argument wins over `KARTEI_DIR`. With neither, or with a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1.
+
+## Edit Thunderbird contacts
+
+Thunderbird exports each of its address books as one `.vcf` Bundle. kartei edits it in place, and Thunderbird imports it back:
+
+1. In Thunderbird's Address Book, right-click the Thunderbird address book and choose **Export**, then the vCard format. This writes e.g. `Contacts.vcf`.
+2. Open the Bundle and edit:
+
+   ```bash
+   kartei Contacts.vcf
+   ```
+
+3. In Thunderbird, choose **Tools > Import**, pick the vCard file, and import it into the **same** Thunderbird address book you exported.
+
+Thunderbird matches Cards by `UID` and replaces the existing contact. Cards added in kartei have new UIDs, so they are imported as new contacts.
+
+:::caution
+Import replaces **every** Card in the file, not only the ones you edited. A change made in Thunderbird after the export is lost. Export again right before editing.
+:::
+
+:::caution
+Dragging contacts between Thunderbird address books gives them new UIDs. A Bundle exported from one Thunderbird address book then no longer matches the contacts in the other. Importing it creates duplicates.
+:::
 
 ## Sync with vdirsyncer
 
