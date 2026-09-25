@@ -24,6 +24,39 @@ impl ContentLine {
         })
     }
 
+    pub(crate) fn new(name: &str, value: &str, eol: &str) -> Self {
+        Self::build(&format!("{name}:{value}"), eol)
+    }
+
+    pub(crate) fn with_value(&self, value: &str) -> Self {
+        let mut logical = self
+            .group
+            .as_ref()
+            .map_or_else(String::new, |group| format!("{group}."));
+        logical.push_str(&self.name);
+        for param in &self.params {
+            logical.push(';');
+            logical.push_str(param);
+        }
+        logical.push(':');
+        logical.push_str(value);
+        Self::build(&logical, self.eol())
+    }
+
+    fn build(logical: &str, eol: &str) -> Self {
+        Self::from_raw(fold(logical, eol)).expect("folded from a str")
+    }
+
+    pub(crate) fn eol(&self) -> &'static str {
+        if self.raw.ends_with(b"\r\n") {
+            "\r\n"
+        } else if self.raw.ends_with(b"\n") {
+            "\n"
+        } else {
+            ""
+        }
+    }
+
     pub fn raw(&self) -> &[u8] {
         &self.raw
     }
@@ -67,6 +100,22 @@ pub(crate) fn split(bytes: &[u8]) -> Option<Vec<ContentLine>> {
         }
     }
     lines.into_iter().map(ContentLine::from_raw).collect()
+}
+
+fn fold(logical: &str, eol: &str) -> Vec<u8> {
+    let mut out = String::with_capacity(logical.len() + eol.len());
+    let mut width = 0;
+    for c in logical.chars() {
+        if width + c.len_utf8() > 75 {
+            out.push_str(eol);
+            out.push(' ');
+            width = 1;
+        }
+        out.push(c);
+        width += c.len_utf8();
+    }
+    out.push_str(eol);
+    out.into_bytes()
 }
 
 fn unfold(raw: &[u8]) -> Vec<u8> {
@@ -132,6 +181,21 @@ pub(crate) fn unescape(value: &str) -> String {
             Some('n' | 'N') => out.push('\n'),
             Some(escaped) => out.push(escaped),
             None => out.push('\\'),
+        }
+    }
+    out
+}
+
+pub(crate) fn escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '\\' | ',' | ';' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '\n' => out.push_str("\\n"),
+            _ => out.push(c),
         }
     }
     out

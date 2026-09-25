@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::Card;
+use kartei::card::{Card, Field};
 use proptest::prelude::*;
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -171,6 +171,74 @@ proptest! {
             prop_assert_eq!(parsed.name(), generated.name.as_str());
             prop_assert_eq!(parsed.params(), generated.params.as_slice());
             prop_assert_eq!(parsed.value(), generated.value.as_str());
+        }
+    }
+}
+
+const FIELDS: [(Field, &str); 9] = [
+    (Field::Prefixes, "N"),
+    (Field::Given, "N"),
+    (Field::Additional, "N"),
+    (Field::Family, "N"),
+    (Field::Suffixes, "N"),
+    (Field::DisplayName, "FN"),
+    (Field::Company, "ORG"),
+    (Field::Department, "ORG"),
+    (Field::Note, "NOTE"),
+];
+
+fn good_fixtures() -> Vec<String> {
+    let mut names: Vec<String> =
+        fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| !name.starts_with("bad-"))
+            .collect();
+    names.sort();
+    names
+}
+
+fn lines_other_than(card: &Card, property: &str) -> Vec<Vec<u8>> {
+    card.lines()
+        .iter()
+        .filter(|l| !l.name().eq_ignore_ascii_case(property))
+        .map(|l| l.raw().to_vec())
+        .collect()
+}
+
+proptest! {
+    #[test]
+    fn a_single_value_edit_changes_only_that_fields_lines(
+        name in proptest::sample::select(good_fixtures()),
+        field in 0..FIELDS.len(),
+        value in "[^\r]{0,100}",
+    ) {
+        let before = Card::parse(&fixture(&name)).unwrap();
+        let (field, property) = FIELDS[field];
+        let mut after = before.clone();
+        after.set(field, &value);
+
+        prop_assert_eq!(lines_other_than(&after, property), lines_other_than(&before, property));
+        let reparsed = Card::parse(&after.to_bytes()).unwrap();
+        for (other, _) in FIELDS {
+            let expected = if other == field { value.clone() } else { before.get(other) };
+            prop_assert_eq!(reparsed.get(other), expected, "{:?}", other);
+        }
+    }
+
+    #[test]
+    fn edited_lines_fold_within_75_octets_on_character_boundaries(
+        field in 0..FIELDS.len(),
+        value in "[^\r]{0,300}",
+    ) {
+        let (field, property) = FIELDS[field];
+        let mut card = Card::parse(b"BEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n").unwrap();
+        card.set(field, &value);
+        let edited = card.lines().iter().filter(|l| l.name() == property);
+        for physical in edited.flat_map(|l| l.raw().split_inclusive(|&b| b == b'\n')) {
+            let content = physical.strip_suffix(b"\r\n").unwrap();
+            prop_assert!(content.len() <= 75, "{} octets", content.len());
+            prop_assert!(std::str::from_utf8(content).is_ok());
         }
     }
 }

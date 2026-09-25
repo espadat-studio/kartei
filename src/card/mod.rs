@@ -49,6 +49,50 @@ pub struct Organization {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Field {
+    Prefixes,
+    Given,
+    Additional,
+    Family,
+    Suffixes,
+    DisplayName,
+    Company,
+    Department,
+    Note,
+}
+
+impl Field {
+    fn property(self) -> (&'static str, Option<usize>) {
+        match self {
+            Self::Family => ("N", Some(0)),
+            Self::Given => ("N", Some(1)),
+            Self::Additional => ("N", Some(2)),
+            Self::Prefixes => ("N", Some(3)),
+            Self::Suffixes => ("N", Some(4)),
+            Self::DisplayName => ("FN", None),
+            Self::Company => ("ORG", Some(0)),
+            Self::Department => ("ORG", Some(1)),
+            Self::Note => ("NOTE", None),
+        }
+    }
+}
+
+pub fn derived_display_name(part: impl Fn(Field) -> String) -> String {
+    [
+        Field::Prefixes,
+        Field::Given,
+        Field::Additional,
+        Field::Family,
+        Field::Suffixes,
+    ]
+    .map(part)
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Defect {
     NoBegin,
     NoEnd,
@@ -100,22 +144,74 @@ impl Card {
         &self.lines
     }
 
+    pub fn get(&self, field: Field) -> String {
+        let (name, component) = field.property();
+        let value = self.values(name).next().unwrap_or_default();
+        match component {
+            None => line::unescape(value),
+            Some(i) => line::split_unescaped(value, ';')
+                .get(i)
+                .map(|c| line::unescape(c))
+                .unwrap_or_default(),
+        }
+    }
+
+    pub fn set(&mut self, field: Field, value: &str) {
+        if self.get(field) == value {
+            return;
+        }
+        let (name, component) = field.property();
+        let index = self
+            .lines
+            .iter()
+            .position(|l| l.name().eq_ignore_ascii_case(name));
+        let (raw, is_empty) = match component {
+            None => (line::escape(value), value.is_empty()),
+            Some(i) => {
+                let current = index.map_or("", |index| self.lines[index].value());
+                let mut parts: Vec<String> = line::split_unescaped(current, ';')
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect();
+                let len = if name == "N" { 5 } else { i + 1 };
+                if parts.len() < len {
+                    parts.resize(len, String::new());
+                }
+                parts[i] = line::escape(value);
+                let is_empty = parts.iter().all(String::is_empty);
+                (parts.join(";"), is_empty)
+            }
+        };
+        let is_removed =
+            is_empty && matches!(field, Field::Company | Field::Department | Field::Note);
+        match index {
+            Some(index) if is_removed => {
+                self.lines.remove(index);
+            }
+            Some(index) => self.lines[index] = self.lines[index].with_value(&raw),
+            None => {
+                let end = self
+                    .lines
+                    .iter()
+                    .rposition(|l| l.is("END", "VCARD"))
+                    .expect("parsed card ends with END:VCARD");
+                let eol = self
+                    .lines
+                    .iter()
+                    .find(|l| l.is("BEGIN", "VCARD"))
+                    .expect("parsed card starts with BEGIN:VCARD")
+                    .eol();
+                self.lines.insert(end, ContentLine::new(name, &raw, eol));
+            }
+        }
+    }
+
     pub fn display_name(&self) -> String {
-        self.values("FN")
-            .next()
-            .map(line::unescape)
-            .unwrap_or_default()
+        self.get(Field::DisplayName)
     }
 
     pub fn structured_name(&self) -> (String, String) {
-        let value = self.values("N").next().unwrap_or_default();
-        let mut components = line::split_unescaped(value, ';')
-            .into_iter()
-            .map(line::unescape);
-        (
-            components.next().unwrap_or_default(),
-            components.next().unwrap_or_default(),
-        )
+        (self.get(Field::Family), self.get(Field::Given))
     }
 
     pub fn phones(&self) -> Vec<Labeled<String>> {

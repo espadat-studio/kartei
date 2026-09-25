@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Address, Birthday, Card, Defect, Labeled, Organization};
+use kartei::card::{self, Address, Birthday, Card, Defect, Field, Labeled, Organization};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -195,4 +195,87 @@ fn files_that_are_not_a_single_card_are_rejected() {
 fn blank_lines_around_a_card_are_accepted() {
     let card = Card::parse(b"\r\nBEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n\r\n").unwrap();
     assert_eq!(card.display_name(), "x");
+}
+
+fn edited(bytes: &str, field: Field, value: &str) -> String {
+    let mut card = Card::parse(bytes.as_bytes()).unwrap();
+    card.set(field, value);
+    String::from_utf8(card.to_bytes()).unwrap()
+}
+
+#[test]
+fn setting_a_name_part_rewrites_only_that_component() {
+    assert_eq!(
+        edited(
+            "BEGIN:VCARD\r\nN:Doe\\, Sr;Jane;Q;;\r\nFN:Jane Doe\r\nEND:VCARD\r\n",
+            Field::Given,
+            "Ann; Marie",
+        ),
+        "BEGIN:VCARD\r\nN:Doe\\, Sr;Ann\\; Marie;Q;;\r\nFN:Jane Doe\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn setting_a_missing_property_appends_it_before_end_with_the_cards_line_ending() {
+    assert_eq!(
+        edited("BEGIN:VCARD\nFN:x\nEND:VCARD", Field::Note, "a,b\nc\\"),
+        "BEGIN:VCARD\nFN:x\nNOTE:a\\,b\\nc\\\\\nEND:VCARD"
+    );
+    assert_eq!(
+        edited("BEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n", Field::Given, "Ann"),
+        "BEGIN:VCARD\r\nFN:x\r\nN:;Ann;;;\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn clearing_note_or_organization_removes_the_line() {
+    let card = "BEGIN:VCARD\r\nFN:x\r\nORG:ACME;\r\nNOTE:hi\r\nEND:VCARD\r\n";
+    assert_eq!(
+        edited(card, Field::Note, ""),
+        "BEGIN:VCARD\r\nFN:x\r\nORG:ACME;\r\nEND:VCARD\r\n"
+    );
+    assert_eq!(
+        edited(card, Field::Company, ""),
+        "BEGIN:VCARD\r\nFN:x\r\nNOTE:hi\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn setting_an_unchanged_value_keeps_the_original_bytes() {
+    let card = "BEGIN:VCARD\r\nitem1.fn;CHARSET=utf-8:Jane\r\nEND:VCARD\r\n";
+    assert_eq!(edited(card, Field::DisplayName, "Jane"), card);
+    assert_eq!(
+        edited(card, Field::DisplayName, "Jo"),
+        "BEGIN:VCARD\r\nitem1.fn;CHARSET=utf-8:Jo\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn long_values_fold_at_75_octets_without_splitting_characters() {
+    let value = format!("{}ü{}", "a".repeat(73), "b".repeat(80));
+    assert_eq!(
+        edited("BEGIN:VCARD\r\nEND:VCARD\r\n", Field::Note, &value),
+        format!(
+            "BEGIN:VCARD\r\nNOTE:{}\r\n {}ü{}\r\n {}\r\nEND:VCARD\r\n",
+            "a".repeat(70),
+            "a".repeat(3),
+            "b".repeat(69),
+            "b".repeat(11)
+        )
+    );
+}
+
+#[test]
+fn display_name_derives_from_name_parts_in_reading_order() {
+    let parts = |field| match field {
+        Field::Prefixes => "Dr.",
+        Field::Given => "Jane",
+        Field::Additional => "",
+        Field::Family => "Doe",
+        _ => "PhD",
+    };
+    assert_eq!(
+        card::derived_display_name(|field| parts(field).to_owned()),
+        "Dr. Jane Doe PhD"
+    );
 }
