@@ -25,7 +25,11 @@ fn card(structured_name: &str, display_name: &str, tel: &str, email: &str) -> St
 }
 
 fn screen(app: &App) -> Vec<String> {
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    screen_of_width(app, 80)
+}
+
+fn screen_of_width(app: &App, width: u16) -> Vec<String> {
+    let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
     terminal.draw(|frame| ui::draw(frame, app)).unwrap();
     let buffer = terminal.backend().buffer();
     let width = buffer.area.width as usize;
@@ -307,4 +311,71 @@ fn status_bar_has_no_skipped_count_when_all_cards_load() {
             .unwrap()
             .contains("skipped")
     );
+}
+
+#[test]
+fn bang_lists_every_skipped_path_with_its_reason() {
+    let dir = copy_fixtures("skipped-list");
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    assert!(screen(&app).last().unwrap().contains("! list"));
+
+    press(&mut app, KeyCode::Char('!'));
+    let screen = screen_of_width(&app, 240);
+    for (file, reason) in [
+        ("bad-no-begin.vcf", "no BEGIN:VCARD"),
+        ("bad-no-end.vcf", "no END:VCARD"),
+        ("bad-multiple-vcards.vcf", "more than one VCARD"),
+        ("bad-invalid-utf8.vcf", "invalid UTF-8"),
+    ] {
+        let row = row_of(&screen, &dir.join(file).display().to_string());
+        assert!(screen[row + 1].contains(reason), "{}", screen.join("\n"));
+    }
+
+    press(&mut app, KeyCode::Esc);
+    assert!(
+        !screen_of_width(&app, 240)
+            .join("\n")
+            .contains("bad-no-begin.vcf")
+    );
+    assert!(!app.should_quit());
+}
+
+#[test]
+fn bang_does_nothing_when_no_card_was_skipped() {
+    let mut app = open("nothing-to-list");
+    press(&mut app, KeyCode::Char('!'));
+    press(&mut app, KeyCode::Char('q'));
+    assert!(app.should_quit());
+}
+
+fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>, std::time::SystemTime)> {
+    let mut files: Vec<_> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let modified = fs::metadata(&path).unwrap().modified().unwrap();
+            (path.clone(), fs::read(&path).unwrap(), modified)
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+#[test]
+fn skipped_files_are_never_written() {
+    let dir = copy_fixtures("skipped-untouched");
+    let before = snapshot(&dir);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    for code in [
+        KeyCode::Char('!'),
+        KeyCode::Esc,
+        KeyCode::Char('G'),
+        KeyCode::Char('!'),
+        KeyCode::Enter,
+        KeyCode::Char('q'),
+    ] {
+        press(&mut app, code);
+        screen(&app);
+    }
+    assert_eq!(snapshot(&dir), before);
 }
