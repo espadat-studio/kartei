@@ -52,7 +52,7 @@ conversion on read.
 - Digest auth since 0.19.3 (`auth = "digest"`). `guess` is refused with a UserError ([vdirsyncer/http.py](https://github.com/pimutils/vdirsyncer/blob/main/vdirsyncer/http.py)).
 - Two-way sync. `conflict_resolution`: `null` (default: error, no change), `"a wins"`, `"b wins"`, or `["command", "nvim", "-d"]` ([docs/config.rst](https://github.com/pimutils/vdirsyncer/blob/main/docs/config.rst)).
 - Whole-item conflicts only. Per-property merge has been open since 2016 ([#521](https://github.com/pimutils/vdirsyncer/issues/521)).
-- Safety: raises `StorageEmpty` if one side got fully emptied since the last sync. Override with `--force-delete` ([sync/__init__.py](https://github.com/pimutils/vdirsyncer/blob/main/vdirsyncer/sync/__init__.py)).
+- Safety: raises `StorageEmpty` if one side got fully emptied since the last sync. Override with `--force-delete` ([sync/**init**.py](https://github.com/pimutils/vdirsyncer/blob/main/vdirsyncer/sync/__init__.py)).
 - Items are opaque: they are hashed for change detection and never re-serialized. Known wart: files are written with LF, not CRLF ([#1128](https://github.com/pimutils/vdirsyncer/issues/1128)). The maintainer points to pimsync as the fix.
 - Baïkal: "continuously tested against the latest version of Baikal" ([docs/tutorials/baikal.rst](https://github.com/pimutils/vdirsyncer/blob/main/docs/tutorials/baikal.rst)). Open [#896](https://github.com/pimutils/vdirsyncer/issues/896) (Baïkal test 500s, 2021) is unresolved.
 - Secrets: `password.fetch = ["command", ...]`, already in use locally.
@@ -105,16 +105,16 @@ conversion on read.
 
 ### Real TUIs — none viable (GitHub/crates.io search, 2026-09-25)
 
-| Project | State | Verdict |
-|---|---|---|
-| [kenianbei/vcard_tui](https://github.com/kenianbei/vcard_tui) (Rust) | 4 commits, last 2024-01-20, v0.1.2, 4★ | dead |
-| [verdigris12/rldx](https://github.com/verdigris12/rldx) (Rust, vdir) | 77 commits in 2 days (2026-01-10..11), 0★, README: "vibe coded … not even in alpha" | do not trust with data |
-| [popplestones/rs-rolodex](https://github.com/popplestones/rs-rolodex) (ratatui) | 1 day of activity 2025-07-16, reads `contacts.json` | not vCard |
-| [mrusme/addrb](https://github.com/mrusme/addrb) (Go, CardDAV) | archived 2026-07-22, lookup-only | superseded |
-| [mrusme/inca](https://github.com/mrusme/inca) (Go, CalDAV+CardDAV) | active (28 commits since 2026-07-22), README: depends on a private "Maya" go-webdav fork | unusable today |
-| [nikiroo/jvcard](https://github.com/nikiroo/jvcard) (Java) | last push 2019-03-03 | dead |
-| [uriel1998/ppl_virdirsyncer_addysearch](https://github.com/uriel1998/ppl_virdirsyncer_addysearch) | shell viewer/searcher over vcards, 4★ | viewer only |
-| abook (installed) | own native format, vCard only via `--convert` (`man abook`) | lossy for vCard round-trips |
+| Project                                                                                           | State                                                                                    | Verdict                     |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------- |
+| [kenianbei/vcard_tui](https://github.com/kenianbei/vcard_tui) (Rust)                              | 4 commits, last 2024-01-20, v0.1.2, 4★                                                   | dead                        |
+| [verdigris12/rldx](https://github.com/verdigris12/rldx) (Rust, vdir)                              | 77 commits in 2 days (2026-01-10..11), 0★, README: "vibe coded … not even in alpha"      | do not trust with data      |
+| [popplestones/rs-rolodex](https://github.com/popplestones/rs-rolodex) (ratatui)                   | 1 day of activity 2025-07-16, reads `contacts.json`                                      | not vCard                   |
+| [mrusme/addrb](https://github.com/mrusme/addrb) (Go, CardDAV)                                     | archived 2026-07-22, lookup-only                                                         | superseded                  |
+| [mrusme/inca](https://github.com/mrusme/inca) (Go, CalDAV+CardDAV)                                | active (28 commits since 2026-07-22), README: depends on a private "Maya" go-webdav fork | unusable today              |
+| [nikiroo/jvcard](https://github.com/nikiroo/jvcard) (Java)                                        | last push 2019-03-03                                                                     | dead                        |
+| [uriel1998/ppl_virdirsyncer_addysearch](https://github.com/uriel1998/ppl_virdirsyncer_addysearch) | shell viewer/searcher over vcards, 4★                                                    | viewer only                 |
+| abook (installed)                                                                                 | own native format, vCard only via `--convert` (`man abook`)                              | lossy for vCard round-trips |
 
 ### Direct-CardDAV CLI: cardamum
 

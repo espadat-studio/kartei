@@ -1,0 +1,29 @@
+[tasks.build]
+alias = "b"
+run = "cargo build --release"
+
+[tasks.test]
+alias = "t"
+run = "cargo nextest run"
+
+[tasks.check-format]
+run = "dprint check"
+
+[tasks.check-rustfmt]
+run = "cargo fmt -- --check"
+
+[tasks.check-clippy]
+run = "cargo clippy --all-targets -- -D warnings"
+
+[tasks.check]
+alias = "c"
+depends = ["check-*"]
+
+[tools]
+"cargo:cargo-nextest" = "0.9.146"
+"cargo:convco" = "0.7.2"
+"aqua:dprint/dprint" = "0.57.4"
+hk = "2.0.1"
+node = "24.21.0"
+pkl = "0.32.1"
+rust = { version = "1.98.1", components = "clippy,rustfmt" }
