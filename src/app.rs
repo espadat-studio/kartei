@@ -332,7 +332,7 @@ impl App {
             .addresses()
             .into_iter()
             .map(|v| ("Address", v.label, v.value.to_string()));
-        let urls = card.urls().into_iter().map(|url| ("URL", None, url));
+        let urls = card.urls().into_iter().map(|v| ("URL", v.label, v.value));
         phones
             .chain(emails)
             .chain(addresses)

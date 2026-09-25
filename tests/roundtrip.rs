@@ -250,10 +250,11 @@ proptest! {
     }
 }
 
-const KINDS: [(Kind, &str, usize); 3] = [
+const KINDS: [(Kind, &str, usize); 4] = [
     (Kind::Phone, "TEL", 1),
     (Kind::Email, "EMAIL", 1),
     (Kind::Address, "ADR", 5),
+    (Kind::Url, "URL", 1),
 ];
 
 fn outside_value(card: &Card, property: &str, n: usize) -> Vec<Vec<u8>> {

@@ -161,8 +161,11 @@ fn company_card_reads_organization_note_and_urls() {
         Some("Open 24/7.\nAsk for Bob, not Rob.")
     );
     assert_eq!(
-        card.urls(),
-        ["https://acme.example", "https://acme.example/emergency"]
+        labeled(&card.urls()),
+        [
+            (Some("HomePage"), "https://acme.example"),
+            (None, "https://acme.example/emergency"),
+        ]
     );
     assert_eq!(labeled(&card.phones()), [(Some("work"), "+1 555 0100")]);
 }
@@ -306,11 +309,58 @@ fn relabeling_a_grouped_value_drops_its_apple_label_and_keeps_the_group() {
 
 #[test]
 fn labels_cycle_through_home_work_cell_other() {
-    assert_eq!(card::next_label(None), "home");
-    assert_eq!(card::next_label(Some("Gym")), "home");
-    assert_eq!(card::next_label(Some("home")), "work");
-    assert_eq!(card::next_label(Some("cell")), "other");
-    assert_eq!(card::next_label(Some("other")), "home");
+    for kind in [Kind::Phone, Kind::Email, Kind::Address] {
+        assert_eq!(kind.next_label(None), "home");
+        assert_eq!(kind.next_label(Some("Gym")), "home");
+        assert_eq!(kind.next_label(Some("home")), "work");
+        assert_eq!(kind.next_label(Some("work")), "cell");
+        assert_eq!(kind.next_label(Some("cell")), "other");
+        assert_eq!(kind.next_label(Some("other")), "home");
+    }
+}
+
+#[test]
+fn url_labels_cycle_through_home_work_other() {
+    assert_eq!(Kind::Url.next_label(None), "home");
+    assert_eq!(Kind::Url.next_label(Some("HomePage")), "home");
+    assert_eq!(Kind::Url.next_label(Some("home")), "work");
+    assert_eq!(Kind::Url.next_label(Some("work")), "other");
+    assert_eq!(Kind::Url.next_label(Some("cell")), "home");
+    assert_eq!(Kind::Url.next_label(Some("other")), "home");
+}
+
+#[test]
+fn editing_a_grouped_url_rewrites_only_its_url_line_and_keeps_the_label() {
+    let mut card = fixture("company.vcf");
+    let before = String::from_utf8(card.to_bytes()).unwrap();
+    card.update(
+        Kind::Url,
+        0,
+        &["https://acme.example/new".into()],
+        Some("HomePage"),
+    );
+    assert_eq!(
+        String::from_utf8(card.to_bytes()).unwrap(),
+        before.replace(
+            "item1.URL;type=pref:https\\://acme.example\r\n",
+            "item1.URL;type=pref:https://acme.example/new\r\n"
+        )
+    );
+    assert_eq!(card.urls()[0].label.as_deref(), Some("HomePage"));
+}
+
+#[test]
+fn removing_a_grouped_url_removes_its_whole_group() {
+    let mut card = fixture("company.vcf");
+    let before = String::from_utf8(card.to_bytes()).unwrap();
+    card.remove(Kind::Url, 0);
+    assert_eq!(
+        String::from_utf8(card.to_bytes()).unwrap(),
+        before.replace(
+            "item1.URL;type=pref:https\\://acme.example\r\nitem1.X-ABLabel:_$!<HomePage>!$_\r\n",
+            ""
+        )
+    );
 }
 
 #[test]
