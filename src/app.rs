@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use uuid::Uuid;
@@ -201,7 +201,7 @@ impl App {
             return self.write();
         }
         let (path, _) = &draft.location;
-        match vdir::conflict(path, &self.loaded(path).concat()) {
+        match vdir::conflict(path, &self.files[path].concat()) {
             Ok(None) => self.write(),
             Ok(Some(conflict)) => self.mode = Mode::Conflict(conflict),
             Err(err) => self.error = Some(format!("save failed: {err}")),
@@ -223,11 +223,14 @@ impl App {
         }
         let location = draft.location.clone();
         let (path, index) = &location;
-        let mut chunks = self.loaded(path).to_vec();
-        match chunks.get_mut(*index) {
-            Some(chunk) => *chunk = edited.to_bytes(),
-            None => chunks.push(edited.to_bytes()),
-        }
+        let chunks = match draft.is_new {
+            true => vec![edited.to_bytes()],
+            false => {
+                let mut chunks = self.files[path].clone();
+                chunks[*index] = edited.to_bytes();
+                chunks
+            }
+        };
         if let Err(err) = vdir::save(path, &chunks.concat()) {
             self.error = Some(format!("save failed: {err}"));
             return;
@@ -239,10 +242,6 @@ impl App {
         }
         self.close_form();
         self.show(Some(&location));
-    }
-
-    fn loaded(&self, path: &Path) -> &[Vec<u8>] {
-        self.files.get(path).map_or(&[], Vec::as_slice)
     }
 
     fn reload(&mut self, location: Option<Location>) {

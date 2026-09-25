@@ -1289,8 +1289,8 @@ fn bundle() -> [String; 3] {
 }
 
 fn open_bundle(test: &str, cards: &[&str]) -> (PathBuf, App) {
-    let dir = address_book(test, &[("export.vcf", &cards.concat()), ("anna.vcf", ANNA)]);
-    (dir.join("export.vcf"), App::new(vdir::load(&dir).unwrap()))
+    let dir = address_book(test, &[("bundle.vcf", &cards.concat()), ("anna.vcf", ANNA)]);
+    (dir.join("bundle.vcf"), App::new(vdir::load(&dir).unwrap()))
 }
 
 fn edit_bob_then_change_dee_on_disk(test: &str) -> (PathBuf, App, String) {
@@ -1436,5 +1436,23 @@ fn a_thunderbird_export_loads_every_card() {
     assert_shows(
         &detail(&screen_of_width(&app, 200)),
         &["theo@example.org", "every contact ends up in one file."],
+    );
+}
+
+#[test]
+fn o_recreates_a_deleted_bundle_with_the_edit_and_the_other_cards_as_loaded() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("bundle-deleted", &[&cy, &bob, &dee]);
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    fs::remove_file(&path).unwrap();
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Deleted));
+
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        [cy, bob.replace("Bob", "Rob"), dee].concat()
     );
 }
