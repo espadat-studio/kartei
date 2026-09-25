@@ -1,0 +1,62 @@
+name: master
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      any_rs_changed: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+        id: changed-files
+        with:
+          files: |
+            {src,tests}/**/*.rs
+            Cargo.toml
+            Cargo.lock
+
+  _test:
+    needs: changed-files
+    if: needs.changed-files.outputs.any_rs_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2
+        with:
+          tool: cargo-nextest
+      - run: cargo nextest run
+
+  test:
+    needs: _test
+    if: ${{ !(failure() || cancelled()) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tests OK (passed or skipped)
+        run: exit 0
+
+  check:
+    runs-on: ubuntu-latest
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        with:
+          install_args: rust aqua:dprint/dprint
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: mise r check
