@@ -18,6 +18,7 @@ pub type Location = (PathBuf, usize);
 #[derive(Debug)]
 pub struct Skipped {
     pub path: PathBuf,
+    pub position: Option<usize>,
     pub defect: Defect,
 }
 
@@ -48,11 +49,13 @@ pub fn load(dir: &Path) -> io::Result<AddressBook> {
         }
         let bytes = fs::read(&path)?;
         let chunks: Vec<Vec<u8>> = split(&bytes).into_iter().map(<[u8]>::to_vec).collect();
+        let is_bundle = chunks.len() > 1;
         for (index, chunk) in chunks.iter().enumerate() {
             match Card::parse(chunk) {
                 Ok(card) => book.cards.push(((path.clone(), index), card)),
                 Err(defect) => book.skipped.push(Skipped {
                     path: path.clone(),
+                    position: is_bundle.then_some(index + 1),
                     defect,
                 }),
             }

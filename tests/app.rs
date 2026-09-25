@@ -327,6 +327,7 @@ fn bang_lists_every_skipped_path_with_its_reason() {
         ("bad-invalid-utf8.vcf", "invalid UTF-8"),
     ] {
         let row = row_of(&screen, &dir.join(file).display().to_string());
+        assert!(!screen[row].contains('#'), "{}", screen.join("\n"));
         assert!(screen[row + 1].contains(reason), "{}", screen.join("\n"));
     }
 
@@ -1402,19 +1403,46 @@ fn shift_r_picks_up_cards_added_to_or_removed_from_a_bundle() {
 
 #[test]
 fn a_defective_card_in_a_bundle_is_skipped_alone_and_written_back_untouched() {
-    let [cy, _, dee] = bundle();
+    let [cy, bob, dee] = bundle();
+    let eve = card(
+        "Evans;Eve;;;",
+        "Eve Evans",
+        "+1 555 0105",
+        "eve@example.org",
+    );
+    let fay = card("Ford;Fay;;;", "Fay Ford", "+1 555 0106", "fay@example.org");
     let broken = "BEGIN:VCARD\r\nFN:Broken\r\n";
-    let (path, mut app) = open_bundle("bundle-defect", &[&cy, broken, &dee]);
-    assert_eq!(listed(&app), ["Anna Adams", "Cy Cole", "Dee Diaz"]);
-    assert_eq!(app.skipped().len(), 1);
+    let (path, mut app) = open_bundle("bundle-defect", &[&cy, &bob, &dee, broken, &eve, &fay]);
+    assert_eq!(
+        listed(&app),
+        [
+            "Anna Adams",
+            "Bob Brown",
+            "Cy Cole",
+            "Dee Diaz",
+            "Eve Evans",
+            "Fay Ford"
+        ]
+    );
+    assert!(screen(&app).last().unwrap().contains("1 card skipped"));
 
-    select(&mut app, "Dee Diaz");
+    press(&mut app, KeyCode::Char('!'));
+    let screen = screen_of_width(&app, 240);
+    let row = row_of(&screen, &format!("{} #4", path.display()));
+    assert!(
+        screen[row + 1].contains("no END:VCARD"),
+        "{}",
+        screen.join("\n")
+    );
+    press(&mut app, KeyCode::Esc);
+
+    select(&mut app, "Eve Evans");
     press(&mut app, KeyCode::Char('e'));
-    replace_given_name(&mut app, "Dee", "Dora");
+    replace_given_name(&mut app, "Eve", "Eva");
     save(&mut app);
     assert_eq!(
         fs::read_to_string(path).unwrap(),
-        [cy.as_str(), broken, &dee.replace("Dee", "Dora")].concat()
+        [&cy, &bob, &dee, broken, &eve.replace("Eve", "Eva"), &fay].concat()
     );
 }
 
