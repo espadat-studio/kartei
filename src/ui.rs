@@ -9,7 +9,7 @@ use crate::card::Card;
 use crate::form::Form;
 use crate::vdir::Conflict;
 
-const HINTS: &str = " / search  e edit  n new  d delete  y copy  ? help  q quit";
+const HINTS: &str = " / search  e edit  E raw edit  n new  d delete  y copy  ? help  q quit";
 const EDIT_HINTS: &str = " Ctrl-s save  Esc cancel  Tab move  Alt-a/d add/remove  Alt-l label";
 const LABEL_WIDTH: u16 = 13;
 const ANY_KEY: &str = " any key closes ";
@@ -22,6 +22,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("g/G", "top/bottom"),
             ("/", "search"),
             ("e/Enter", "edit card"),
+            ("E", "edit raw vCard"),
             ("n", "new card"),
             ("d", "delete card"),
             ("y", "copy a value"),
@@ -40,6 +41,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("Esc", "clear filter"),
         ],
     ),
+    ("Prompt, Help", &[("any key", "close")]),
     (
         "Edit",
         &[
@@ -61,7 +63,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     ),
     ("Copy", &[("1-9", "copy value"), ("Esc", "cancel")]),
     ("Delete", &[("y", "delete card"), ("any key", "cancel")]),
-    ("Prompt, Help", &[("any key", "close")]),
+    ("Invalid", &[("e", "edit again"), ("d", "discard")]),
 ];
 
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -95,6 +97,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
         Mode::Copy => " 1-9 copy  Esc close".to_owned(),
         Mode::Edit => EDIT_HINTS.to_owned(),
+        Mode::Invalid(reason) => format!(
+            " e edit again  d discard  (not saved: {})",
+            app.error().unwrap_or(reason)
+        ),
         Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
         Mode::Conflict(Conflict::Changed) => {
             " Card changed on disk: r reload  o overwrite  Esc keep editing".to_owned()
@@ -117,6 +123,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         _ => HINTS.to_owned(),
     };
     let hints = match (app.error(), app.status()) {
+        _ if matches!(app.mode(), Mode::Invalid(_)) => Paragraph::new(hints),
         (Some(error), _) => Paragraph::new(format!(" {error}")).style(Color::Red),
         (None, Some(status)) => Paragraph::new(format!(" {status}")),
         (None, None) => Paragraph::new(hints),
@@ -137,7 +144,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
         | Mode::Discard
         | Mode::Conflict(_)
         | Mode::Delete
-        | Mode::DeleteConflict { .. } => {}
+        | Mode::DeleteConflict { .. }
+        | Mode::Invalid(_) => {}
     }
 }
 
@@ -212,7 +220,7 @@ fn skipped(app: &App) -> Vec<Line<'static>> {
 }
 
 fn keymap() -> Vec<Vec<Line<'static>>> {
-    let (left, right) = KEYMAP.split_at(2);
+    let (left, right) = KEYMAP.split_at(3);
     [left, right]
         .map(|modes| {
             modes

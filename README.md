@@ -44,7 +44,7 @@ A `.vcf` holding several Cards (a Thunderbird export) lists each one; saving rew
 
 ## Lossless edits
 
-kartei rewrites only the lines an edit touches. Every other line is written back byte for byte, so Apple extras (`itemN.` groups, `X-ABLabel`, `PHOTO`, unknown `X-` properties) survive. Before saving, kartei checks that the file on disk still matches what it loaded.
+kartei rewrites only the lines an edit touches. Every other line is written back byte for byte, so Apple extras (`itemN.` groups, `X-ABLabel`, `PHOTO`, unknown `X-` properties) survive. Before saving, kartei checks that the file on disk still matches what it loaded. Raw edits with `E` are the exception: the card is written exactly as your editor saved it. Inside a Bundle, a missing final newline is added so the next card stays apart.
 
 ## Keymap
 
@@ -58,6 +58,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `g` / `G`                | Jump to top / bottom        |
 | `/`                      | Search                      |
 | `e` / `Enter`            | Edit selected card          |
+| `E`                      | Edit raw vCard in `$VISUAL` |
 | `n`                      | New card                    |
 | `d`                      | Delete selected card        |
 | `y`                      | Copy a value (if any)       |
@@ -123,6 +124,21 @@ If the file changed on disk since it was loaded:
 | `Esc` | Cancel                                 |
 
 In a changed bundle, `o` is refused: reload first. A card whose file is already gone is dropped from the list.
+
+### Raw edit
+
+`E` opens the selected card's vCard text in `$VISUAL`, else `$EDITOR`, run through `sh` so arguments work. Inside a Bundle, only that card's text is opened. With neither variable set, the status bar shows an error. The text goes to a temp file readable only by you, deleted once the editor exits.
+
+Saving an empty buffer aborts. Saving unchanged text writes nothing. Otherwise the text must hold exactly one valid card, then it goes through the same conflict check as a save and is written exactly as your editor saved it. Inside a Bundle, a missing final newline is added so the next card stays apart. The line-preserving promise ([ADR-0001](https://github.com/espadat-studio/kartei/blob/master/meta/adr/0001-line-preserving-card-edits.md)) does not hold for raw edits.
+
+If the text is not one valid card, kartei shows why and asks:
+
+| Key | Action                         |
+| --- | ------------------------------ |
+| `e` | Reopen the editor on your text |
+| `d` | Discard the raw edit           |
+
+On a conflict, `Esc` reopens the editor on your text.
 
 ### Copy
 

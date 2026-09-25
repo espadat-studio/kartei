@@ -193,13 +193,19 @@ pub enum Defect {
     InvalidUtf8,
 }
 
-impl fmt::Display for Defect {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
+impl Defect {
+    pub fn reason(self) -> &'static str {
+        match self {
             Self::NoBegin => "no BEGIN:VCARD",
             Self::NoEnd => "no END:VCARD",
             Self::InvalidUtf8 => "invalid UTF-8",
-        })
+        }
+    }
+}
+
+impl fmt::Display for Defect {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.reason())
     }
 }
 

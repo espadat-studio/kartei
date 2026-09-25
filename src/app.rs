@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use uuid::Uuid;
 
-use crate::card::Card;
+use crate::card::{Card, Defect};
 use crate::form::Form;
 use crate::osc52;
 use crate::vdir::{self, AddressBook, Conflict, Location, Skipped};
@@ -21,6 +21,7 @@ pub enum Mode {
     Copy,
     Delete,
     DeleteConflict { is_bundle: bool },
+    Invalid(&'static str),
     Prompt,
     Help,
 }
@@ -38,6 +39,12 @@ impl Draft {
     }
 }
 
+struct RawEdit {
+    location: Location,
+    original: Vec<u8>,
+    edited: Vec<u8>,
+}
+
 pub struct App {
     path: PathBuf,
     cards: Vec<(Location, Card)>,
@@ -48,6 +55,8 @@ pub struct App {
     selected: usize,
     mode: Mode,
     draft: Option<Draft>,
+    raw: Option<RawEdit>,
+    editor_request: Option<Vec<u8>>,
     error: Option<String>,
     status: Option<&'static str>,
     clipboard: Option<String>,
@@ -73,6 +82,8 @@ impl App {
             selected: 0,
             mode: Mode::Browse,
             draft: None,
+            raw: None,
+            editor_request: None,
             error: None,
             status: None,
             clipboard: None,
@@ -92,6 +103,7 @@ impl App {
             Mode::Copy => self.copy(key),
             Mode::Delete => self.confirm_delete(key),
             Mode::DeleteConflict { is_bundle } => self.delete_conflict(key, is_bundle),
+            Mode::Invalid(_) => self.invalid(key),
             Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
         }
     }
@@ -105,6 +117,7 @@ impl App {
             KeyCode::Char('G') => self.selected = last,
             KeyCode::Char('/') => self.mode = Mode::Search,
             KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
+            KeyCode::Char('E') => self.raw_edit(),
             KeyCode::Char('n') => self.new_card(),
             KeyCode::Char('d') if self.selected_card().is_some() => self.mode = Mode::Delete,
             KeyCode::Char('R') => self.reload(self.selected_location()),
@@ -137,6 +150,89 @@ impl App {
             let (location, card) = &self.cards[index];
             self.start_draft(location.clone(), card.clone(), false);
         }
+    }
+
+    fn raw_edit(&mut self) {
+        let Some(location) = self.selected_location() else {
+            return;
+        };
+        let (path, index) = &location;
+        let original = self.files[path][*index].clone();
+        self.editor_request = Some(original.clone());
+        self.raw = Some(RawEdit {
+            location,
+            edited: original.clone(),
+            original,
+        });
+    }
+
+    pub fn finish_raw_edit(&mut self, output: io::Result<Vec<u8>>) {
+        let bytes = match output {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                self.raw = None;
+                self.error = Some(format!("edit failed: {err}"));
+                return;
+            }
+        };
+        let raw = self.raw.as_mut().expect("editor output answers a raw edit");
+        if bytes.trim_ascii().is_empty() {
+            self.raw = None;
+            self.status = Some("edit aborted");
+            return;
+        }
+        if bytes == raw.original {
+            self.raw = None;
+            return;
+        }
+        raw.edited = bytes;
+        if let Err(reason) = check_raw(&raw.edited) {
+            self.mode = Mode::Invalid(reason);
+            return;
+        }
+        let (path, _) = &raw.location;
+        match vdir::conflict(path, &self.files[path].concat()) {
+            Ok(None) => self.write_raw(),
+            Ok(Some(conflict)) => self.mode = Mode::Conflict(conflict),
+            Err(err) => self.reject_raw(format!("save failed: {err}")),
+        }
+    }
+
+    fn invalid(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('e') => self.reopen_editor(),
+            KeyCode::Char('d') => self.close_form(),
+            _ => {}
+        }
+    }
+
+    fn reopen_editor(&mut self) {
+        let raw = self.raw.as_ref().expect("raw edit in progress");
+        self.editor_request = Some(raw.edited.clone());
+        self.mode = Mode::Browse;
+    }
+
+    fn reject_raw(&mut self, error: String) {
+        self.error = Some(error);
+        self.mode = Mode::Invalid("save failed");
+    }
+
+    fn write_raw(&mut self) {
+        let raw = self.raw.as_ref().expect("raw edit in progress");
+        let location = raw.location.clone();
+        let (path, index) = &location;
+        let mut chunks = self.files[path].clone();
+        let mut edited = raw.edited.clone();
+        if index + 1 < chunks.len() && !edited.ends_with(b"\n") {
+            edited.extend_from_slice(vdir::eol(&edited).as_bytes());
+        }
+        chunks[*index] = edited;
+        if let Err(err) = vdir::save(path, &chunks.concat()) {
+            return self.reject_raw(format!("save failed: {err}"));
+        }
+        self.store(path, chunks);
+        self.close_form();
+        self.show(Some(&location));
     }
 
     fn new_card(&mut self) {
@@ -182,11 +278,14 @@ impl App {
     fn conflict(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('r') => {
-                let location = self.draft.take().map(|draft| draft.location);
+                let draft = self.draft.take().map(|draft| draft.location);
+                let location = draft.or_else(|| self.raw.take().map(|raw| raw.location));
                 self.close_form();
                 self.reload(location);
             }
+            KeyCode::Char('o') if self.raw.is_some() => self.write_raw(),
             KeyCode::Char('o') => self.write(),
+            KeyCode::Esc if self.raw.is_some() => self.reopen_editor(),
             KeyCode::Esc => self.mode = Mode::Edit,
             _ => {}
         }
@@ -368,6 +467,7 @@ impl App {
 
     fn close_form(&mut self) {
         self.draft = None;
+        self.raw = None;
         self.error = None;
         self.mode = Mode::Browse;
     }
@@ -427,6 +527,10 @@ impl App {
             .collect()
     }
 
+    pub fn take_editor_request(&mut self) -> Option<Vec<u8>> {
+        self.editor_request.take()
+    }
+
     pub fn take_clipboard(&mut self) -> Option<String> {
         self.clipboard.take()
     }
@@ -450,6 +554,13 @@ impl App {
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }
+}
+
+fn check_raw(bytes: &[u8]) -> Result<(), &'static str> {
+    if vdir::split(bytes).len() > 1 {
+        return Err("more than one card");
+    }
+    Card::parse(bytes).map(drop).map_err(Defect::reason)
 }
 
 fn is_match(card: &Card, query: &str) -> bool {

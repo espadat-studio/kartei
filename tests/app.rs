@@ -512,6 +512,8 @@ fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
         ("j/k", "move"),
         ("g/G", "top/bottom"),
         ("/", "search"),
+        ("E", "edit raw vCard"),
+        ("d", "discard"),
         ("!", "list skipped cards"),
         ("?", "show keys"),
         ("q", "quit"),
@@ -1862,4 +1864,184 @@ fn o_is_refused_when_a_single_card_file_became_a_bundle_on_disk() {
     assert_eq!(app.mode(), Mode::DeleteConflict { is_bundle: true });
     press(&mut app, KeyCode::Char('o'));
     assert_eq!(fs::read_to_string(&path).unwrap(), grown);
+}
+
+fn raw_edit(app: &mut App, name: &str) -> Vec<u8> {
+    select(app, name);
+    press(app, KeyCode::Char('E'));
+    app.take_editor_request().expect("E requests the editor")
+}
+
+#[test]
+fn e_upper_requests_the_editor_with_the_selected_chunk_of_a_bundle() {
+    let [cy, bob, dee] = bundle();
+    let (_, mut app) = open_bundle("raw-request", &[&cy, &bob, &dee]);
+    assert_eq!(raw_edit(&mut app, "Bob Brown"), bob.as_bytes());
+    assert_eq!(app.take_editor_request(), None);
+}
+
+#[test]
+fn an_empty_raw_edit_aborts_and_writes_nothing() {
+    let dir = address_book("raw-empty", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    app.finish_raw_edit(Ok(b"\n".to_vec()));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(app.status(), Some("edit aborted"));
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), ANNA);
+}
+
+#[test]
+fn an_unchanged_raw_edit_writes_nothing() {
+    let dir = address_book("raw-unchanged", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    let original = raw_edit(&mut app, "Anna Adams");
+    fs::write(dir.join("anna.vcf"), EXTERNAL).unwrap();
+    app.finish_raw_edit(Ok(original));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn a_valid_raw_edit_writes_exactly_the_editor_output() {
+    let dir = address_book("raw-valid", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    let output = "BEGIN:VCARD\nversion:3.0\nFN:Hanna Adams\nX-FOO;bar=Baz:qux\nEND:VCARD\n";
+    app.finish_raw_edit(Ok(output.as_bytes().to_vec()));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), output);
+    assert_eq!(listed(&app), ["Hanna Adams"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Hanna Adams");
+}
+
+#[test]
+fn a_valid_raw_edit_in_a_bundle_leaves_its_neighbours_untouched() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("raw-bundle", &[&cy, &bob, &dee]);
+    raw_edit(&mut app, "Bob Brown");
+    let rob = bob.replace("Bob", "Rob");
+    app.finish_raw_edit(Ok(rob.as_bytes().to_vec()));
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        [cy.as_str(), &rob, &dee].concat()
+    );
+}
+
+#[test]
+fn a_raw_edit_without_a_final_newline_keeps_the_next_card_of_the_bundle_apart() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("raw-bundle-eol", &[&cy, &bob, &dee]);
+    raw_edit(&mut app, "Bob Brown");
+    let rob = bob.replace("Bob", "Rob");
+    app.finish_raw_edit(Ok(rob.trim_end().as_bytes().to_vec()));
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        [cy.as_str(), &rob, &dee].concat()
+    );
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Rob Brown", "Cy Cole", "Dee Diaz"]
+    );
+}
+
+#[test]
+fn an_unparseable_raw_edit_shows_the_defect_and_e_reopens_the_edited_text() {
+    let dir = address_book("raw-invalid", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    let broken = ANNA.replace("END:VCARD\r\n", "");
+    app.finish_raw_edit(Ok(broken.as_bytes().to_vec()));
+    assert_eq!(app.mode(), Mode::Invalid("no END:VCARD"));
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &["no END:VCARD", "e edit again", "d discard"],
+    );
+
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(app.take_editor_request(), Some(broken.into_bytes()));
+    app.finish_raw_edit(Ok(EXTERNAL.as_bytes().to_vec()));
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn a_two_card_raw_edit_shows_the_prompt_and_d_discards_it() {
+    let dir = address_book("raw-two", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    app.finish_raw_edit(Ok([ANNA, EXTERNAL].concat().into_bytes()));
+    assert_eq!(app.mode(), Mode::Invalid("more than one card"));
+    assert_shows(screen(&app).last().unwrap(), &["more than one card"]);
+
+    press(&mut app, KeyCode::Char('d'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(app.take_editor_request(), None);
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), ANNA);
+}
+
+#[test]
+fn a_raw_edit_over_a_changed_file_prompts_before_writing() {
+    let dir = address_book("raw-conflict", &[("anna.vcf", ANNA)]);
+    let path = dir.join("anna.vcf");
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    fs::write(&path, EXTERNAL).unwrap();
+    let hanna = ANNA.replace("Anna", "Hanna");
+    app.finish_raw_edit(Ok(hanna.as_bytes().to_vec()));
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Changed));
+    assert_eq!(fs::read_to_string(&path).unwrap(), EXTERNAL);
+
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.take_editor_request(), Some(hanna.clone().into_bytes()));
+    app.finish_raw_edit(Ok(hanna.as_bytes().to_vec()));
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(fs::read_to_string(&path).unwrap(), hanna);
+}
+
+#[test]
+fn r_on_a_raw_edit_conflict_reloads_and_drops_the_edit() {
+    let dir = address_book("raw-conflict-reload", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    fs::write(dir.join("anna.vcf"), EXTERNAL).unwrap();
+    app.finish_raw_edit(Ok(ANNA.replace("Anna", "Hanna").into_bytes()));
+    press(&mut app, KeyCode::Char('r'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(listed(&app), ["Anne Adams"]);
+    assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn a_failed_editor_shows_the_error() {
+    let dir = address_book("raw-failed", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    app.finish_raw_edit(Err(std::io::Error::other(
+        "neither $VISUAL nor $EDITOR is set",
+    )));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &["edit failed", "$VISUAL", "$EDITOR"],
+    );
+}
+
+#[test]
+fn a_raw_edit_that_fails_to_save_shows_the_error_with_the_prompt() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = address_book("raw-save-failed", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+    let hanna = ANNA.replace("Anna", "Hanna");
+    app.finish_raw_edit(Ok(hanna.clone().into_bytes()));
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(app.mode(), Mode::Invalid("save failed"));
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &["save failed: ", "e edit again", "d discard"],
+    );
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(app.take_editor_request(), Some(hanna.into_bytes()));
 }
