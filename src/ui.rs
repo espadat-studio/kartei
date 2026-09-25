@@ -9,7 +9,7 @@ use crate::card::Card;
 use crate::form::Form;
 use crate::vdir::Conflict;
 
-const HINTS: &str = " / search  e edit  n new  y copy  ? help  q quit";
+const HINTS: &str = " / search  e edit  n new  d delete  y copy  ? help  q quit";
 const EDIT_HINTS: &str = " Ctrl-s save  Esc cancel  Tab move  Alt-a/d add/remove  Alt-l label";
 const LABEL_WIDTH: u16 = 13;
 const ANY_KEY: &str = " any key closes ";
@@ -23,6 +23,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("/", "search"),
             ("e/Enter", "edit card"),
             ("n", "new card"),
+            ("d", "delete card"),
             ("y", "copy a value"),
             ("R", "reload from disk"),
             ("!", "list skipped cards"),
@@ -53,12 +54,13 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Conflict",
         &[
-            ("r", "reload, drop edit"),
-            ("o", "overwrite/recreate"),
-            ("Esc", "keep editing"),
+            ("r", "reload, drop edit/delete"),
+            ("o", "overwrite/recreate/delete"),
+            ("Esc", "back"),
         ],
     ),
     ("Copy", &[("1-9", "copy value"), ("Esc", "cancel")]),
+    ("Delete", &[("y", "delete card"), ("any key", "cancel")]),
     ("Prompt, Help", &[("any key", "close")]),
 ];
 
@@ -100,6 +102,18 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Conflict(Conflict::Deleted) => {
             " Card deleted on disk: r reload  o recreate  Esc keep editing".to_owned()
         }
+        Mode::Delete => format!(
+            " Delete {}? y/n",
+            app.selected_card()
+                .map(Card::display_name)
+                .unwrap_or_default()
+        ),
+        Mode::DeleteConflict { is_bundle: false } => {
+            " Card changed on disk: r reload  o delete anyway  Esc cancel".to_owned()
+        }
+        Mode::DeleteConflict { is_bundle: true } => {
+            " Bundle changed on disk: r reload  Esc cancel".to_owned()
+        }
         _ => HINTS.to_owned(),
     };
     let hints = match (app.error(), app.status()) {
@@ -117,7 +131,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Prompt => draw_overlay(frame, "Skipped cards", ANY_KEY, vec![skipped(app)]),
         Mode::Help => draw_overlay(frame, "Keys", ANY_KEY, keymap()),
         Mode::Copy => draw_overlay(frame, "Copy", " 1-9 copy  Esc close ", vec![copyable(app)]),
-        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard | Mode::Conflict(_) => {}
+        Mode::Browse
+        | Mode::Search
+        | Mode::Edit
+        | Mode::Discard
+        | Mode::Conflict(_)
+        | Mode::Delete
+        | Mode::DeleteConflict { .. } => {}
     }
 }
 

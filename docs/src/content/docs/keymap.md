@@ -13,6 +13,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `/`                      | Search                      |
 | `e` / `Enter`            | Edit selected card          |
 | `n`                      | New card                    |
+| `d`                      | Delete selected card        |
 | `y`                      | Copy a value (if any)       |
 | `R`                      | Reload all from disk        |
 | `!`                      | List skipped cards (if any) |
@@ -44,6 +45,25 @@ Typing filters the list live. The match is a case-insensitive substring of the d
 | `Esc`                  | Cancel (asks first if changed)                        |
 
 In the note and street fields, `Enter` inserts a newline. Birthdays are typed as `YYYY-MM-DD`, or `--MM-DD` without a year. A birthday kartei cannot read stays read-only.
+
+## Delete
+
+`d` asks "Delete <name>? y/n". `y` deletes the card for good; any other key cancels. There is no undo. The next card is selected, or the previous one if you deleted the last, and the filter is kept.
+
+- A card alone in its file removes the file, so vdirsyncer propagates the deletion.
+- A card in a bundle drops only its own lines. The other cards stay byte for byte.
+- A file is removed once no card is left, unless it still holds a skipped card.
+- A `.vcf` file given as the address book is never removed, even when empty.
+
+If the file changed on disk since it was loaded, kartei deletes nothing and asks:
+
+| Key   | Action                                 |
+| ----- | -------------------------------------- |
+| `r`   | Reload from disk                       |
+| `o`   | Delete anyway (single-card files only) |
+| `Esc` | Cancel                                 |
+
+In a changed bundle, `o` is refused, because the card may have moved: reload first. A card whose file is already gone is dropped from the list.
 
 ## Copy
 

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -17,6 +19,8 @@ pub enum Mode {
     Discard,
     Conflict(Conflict),
     Copy,
+    Delete,
+    DeleteConflict { is_bundle: bool },
     Prompt,
     Help,
 }
@@ -86,6 +90,8 @@ impl App {
             Mode::Discard => self.discard(key),
             Mode::Conflict(_) => self.conflict(key),
             Mode::Copy => self.copy(key),
+            Mode::Delete => self.confirm_delete(key),
+            Mode::DeleteConflict { is_bundle } => self.delete_conflict(key, is_bundle),
             Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
         }
     }
@@ -100,6 +106,7 @@ impl App {
             KeyCode::Char('/') => self.mode = Mode::Search,
             KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
             KeyCode::Char('n') => self.new_card(),
+            KeyCode::Char('d') if self.selected_card().is_some() => self.mode = Mode::Delete,
             KeyCode::Char('R') => self.reload(self.selected_location()),
             KeyCode::Char('y') if !self.copyable().is_empty() => self.mode = Mode::Copy,
             KeyCode::Char('?') => self.mode = Mode::Help,
@@ -200,6 +207,76 @@ impl App {
         }
     }
 
+    fn confirm_delete(&mut self, key: KeyEvent) {
+        self.mode = Mode::Browse;
+        if key.code != KeyCode::Char('y') {
+            return;
+        }
+        let (path, _) = self
+            .selected_location()
+            .expect("delete has a selected card");
+        let chunks = &self.files[&path];
+        match vdir::conflict(&path, &chunks.concat()) {
+            Ok(None) => self.delete(),
+            Ok(Some(Conflict::Changed)) => {
+                let is_bundle = chunks.len() > 1
+                    || fs::read(&path).is_ok_and(|bytes| vdir::split(&bytes).len() > 1);
+                self.mode = Mode::DeleteConflict { is_bundle }
+            }
+            Ok(Some(Conflict::Deleted)) => {
+                self.store(&path, Vec::new());
+                self.status = Some("card already deleted on disk");
+                self.keep_position();
+            }
+            Err(err) => self.error = Some(format!("delete failed: {err}")),
+        }
+    }
+
+    fn delete_conflict(&mut self, key: KeyEvent, is_bundle: bool) {
+        match key.code {
+            KeyCode::Char('r') => {
+                self.mode = Mode::Browse;
+                self.reload(self.selected_location());
+            }
+            KeyCode::Char('o') if is_bundle => {
+                self.error = Some("bundle changed on disk, r reload before deleting".into())
+            }
+            KeyCode::Char('o') => {
+                self.mode = Mode::Browse;
+                self.delete();
+            }
+            KeyCode::Esc => self.mode = Mode::Browse,
+            _ => {}
+        }
+    }
+
+    fn delete(&mut self) {
+        let (path, index) = self
+            .selected_location()
+            .expect("delete has a selected card");
+        let mut chunks = self.files[&path].clone();
+        chunks.remove(index);
+        let result = match chunks.is_empty() && path != self.path {
+            true => match vdir::remove(&path) {
+                Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+                result => result,
+            },
+            false => vdir::save(&path, &chunks.concat()),
+        };
+        if let Err(err) = result {
+            self.error = Some(format!("delete failed: {err}"));
+            return;
+        }
+        self.store(&path, chunks);
+        self.keep_position();
+    }
+
+    fn keep_position(&mut self) {
+        let selected = self.selected;
+        self.show(None);
+        self.selected = selected.min(self.visible.len().saturating_sub(1));
+    }
+
     fn save(&mut self) {
         let draft = self.draft.as_ref().expect("edit mode has a draft");
         let is_edited = draft.edited().is_ok_and(|edited| edited != draft.card);
@@ -245,15 +322,23 @@ impl App {
             self.error = Some(format!("save failed: {err}"));
             return;
         }
-        self.cards.retain(|((p, _), _)| p != path);
-        for (i, chunk) in chunks.iter().enumerate() {
-            if let Ok(card) = Card::parse(chunk) {
-                self.cards.push(((path.clone(), i), card));
-            }
-        }
-        self.files.insert(path.clone(), chunks);
+        self.store(path, chunks);
         self.close_form();
         self.show(Some(&location));
+    }
+
+    fn store(&mut self, path: &PathBuf, chunks: Vec<Vec<u8>>) {
+        self.cards.retain(|((p, _), _)| p != path);
+        self.skipped.retain(|skipped| &skipped.path != path);
+        if chunks.is_empty() && path != &self.path {
+            self.files.remove(path);
+            return;
+        }
+        let (cards, skipped) = vdir::parse(path, &chunks);
+        self.cards.extend(cards);
+        self.skipped.extend(skipped);
+        self.skipped.sort_by(|a, b| a.path.cmp(&b.path));
+        self.files.insert(path.clone(), chunks);
     }
 
     fn reload(&mut self, location: Option<Location>) {
