@@ -5,7 +5,6 @@ mod line;
 use std::fmt;
 
 pub use bday::Birthday;
-pub use label::next as next_label;
 pub use line::ContentLine;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +96,7 @@ pub enum Kind {
     Phone,
     Email,
     Address,
+    Url,
 }
 
 impl Kind {
@@ -105,7 +105,16 @@ impl Kind {
             Self::Phone => "TEL",
             Self::Email => "EMAIL",
             Self::Address => "ADR",
+            Self::Url => "URL",
         }
+    }
+
+    pub fn next_label(self, label: Option<&str>) -> &'static str {
+        let labels: &[&str] = match self {
+            Self::Url => &["home", "work", "other"],
+            Self::Phone | Self::Email | Self::Address => &["home", "work", "cell", "other"],
+        };
+        label::next(labels, label)
     }
 
     fn decode(self, raw: &str) -> Vec<String> {
@@ -396,8 +405,8 @@ impl Card {
         self.values("NOTE").next().map(line::unescape)
     }
 
-    pub fn urls(&self) -> Vec<String> {
-        self.values("URL").map(line::unescape).collect()
+    pub fn urls(&self) -> Vec<Labeled<String>> {
+        self.labeled("URL", line::unescape)
     }
 
     pub fn addresses(&self) -> Vec<Labeled<Address>> {

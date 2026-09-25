@@ -1,5 +1,3 @@
-const LABELS: [&str; 4] = ["home", "work", "cell", "other"];
-
 pub(crate) fn decode(label: &str) -> String {
     label
         .strip_prefix("_$!<")
@@ -39,9 +37,9 @@ pub(crate) fn retype(params: &[String], label: Option<&str>) -> Vec<String> {
     params
 }
 
-pub fn next(label: Option<&str>) -> &'static str {
-    let current = LABELS.iter().position(|l| Some(*l) == label);
-    LABELS[current.map_or(0, |i| (i + 1) % LABELS.len())]
+pub(crate) fn next(labels: &[&'static str], label: Option<&str>) -> &'static str {
+    let current = labels.iter().position(|l| Some(*l) == label);
+    labels[current.map_or(0, |i| (i + 1) % labels.len())]
 }
 
 fn is_hidden(kind: &str) -> bool {

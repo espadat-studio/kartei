@@ -255,7 +255,7 @@ fn details_show_organization_note_urls_and_address() {
         &[
             "Company  ACME Plumbing",
             "Department  Emergency Repairs",
-            "URL  https://acme.example",
+            "URL (HomePage)  https://acme.example",
             "URL  https://acme.example/emergency",
             "Note",
             "Open 24/7.",
@@ -824,6 +824,27 @@ fn adding_a_phone_with_a_cycled_label_writes_one_typed_tel_line() {
 }
 
 #[test]
+fn adding_a_url_with_a_cycled_label_writes_one_typed_url_line() {
+    let dir = address_book("add-work-url", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    focus(&mut app, "URL");
+    type_text(&mut app, "https://anna.example");
+    alt(&mut app, 'l');
+    alt(&mut app, 'l');
+    assert_shows(&detail(&screen(&app)), &["https://anna.example  (work)"]);
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace(
+            "END:VCARD",
+            "URL;TYPE=WORK:https://anna.example\r\nEND:VCARD"
+        )
+    );
+}
+
+#[test]
 fn a_card_without_emails_offers_a_blank_email_that_is_only_written_when_filled() {
     let dir = address_book("blank-email", &[("anna.vcf", ANNA)]);
     let mut app = App::new(vdir::load(&dir).unwrap());
@@ -859,7 +880,7 @@ fn clearing_a_phone_removes_its_line() {
     );
 }
 
-const BIRTHDAY: usize = FIRST_VALUE + 7;
+const BIRTHDAY: usize = FIRST_VALUE + 8;
 
 fn set_birthday(app: &mut App, old: &str, new: &str) {
     press(app, KeyCode::Char('e'));
@@ -974,7 +995,7 @@ fn an_unreadable_birthday_is_read_only_in_the_form() {
     );
 }
 
-const STREET: usize = FIRST_VALUE + 2;
+const STREET: usize = FIRST_VALUE + 3;
 
 #[test]
 fn editing_an_address_city_keeps_hidden_components_and_the_apple_country_code() {

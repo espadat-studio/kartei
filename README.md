@@ -77,18 +77,18 @@ Typing filters live on display name, company, department, email or phone digits.
 
 ### Edit
 
-| Key                    | Action                               |
-| ---------------------- | ------------------------------------ |
-| `Tab` / `Down`         | Next field                           |
-| `Shift-Tab` / `Up`     | Previous field                       |
-| `Left` / `Right`       | Move cursor                          |
-| `Backspace` / `Delete` | Delete before / after cursor         |
-| `Enter`                | Newline (note and street only)       |
-| `Alt-a`                | Add a value (phone, email, address)  |
-| `Alt-d`                | Remove the focused value             |
-| `Alt-l`                | Cycle label: home, work, cell, other |
-| `Ctrl-s`               | Save                                 |
-| `Esc`                  | Cancel (asks first if changed)       |
+| Key                    | Action                                                |
+| ---------------------- | ----------------------------------------------------- |
+| `Tab` / `Down`         | Next field                                            |
+| `Shift-Tab` / `Up`     | Previous field                                        |
+| `Left` / `Right`       | Move cursor                                           |
+| `Backspace` / `Delete` | Delete before / after cursor                          |
+| `Enter`                | Newline (note and street only)                        |
+| `Alt-a`                | Add a value (phone, email, URL, address)              |
+| `Alt-d`                | Remove the focused value                              |
+| `Alt-l`                | Cycle label: home, work, cell, other (URLs skip cell) |
+| `Ctrl-s`               | Save                                                  |
+| `Esc`                  | Cancel (asks first if changed)                        |
 
 Birthdays are typed as `YYYY-MM-DD`, or `--MM-DD` without a year. A birthday kartei cannot read stays read-only.
 

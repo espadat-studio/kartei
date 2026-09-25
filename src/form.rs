@@ -15,9 +15,10 @@ pub const FIELDS: [(Field, &str); 9] = [
     (Field::Note, "Note"),
 ];
 
-const KINDS: [(Kind, &[&str]); 3] = [
+const KINDS: [(Kind, &[&str]); 4] = [
     (Kind::Phone, &["Phone"]),
     (Kind::Email, &["Email"]),
+    (Kind::Url, &["URL"]),
     (
         Kind::Address,
         &["Street", "Postal code", "City", "Region", "Country"],
@@ -115,7 +116,7 @@ impl Form {
             (KeyCode::Char('d'), Slot::Value(e, _)) if is_alt => self.remove(e),
             (KeyCode::Char('l'), Slot::Value(e, _)) if is_alt => {
                 let entry = &mut self.entries[e];
-                entry.label = Some(card::next_label(entry.label.as_deref()).to_owned());
+                entry.label = Some(entry.kind.next_label(entry.label.as_deref()).to_owned());
             }
             _ => self.type_key(key, slot),
         }

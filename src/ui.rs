@@ -249,7 +249,7 @@ fn details(card: &Card) -> Vec<Line<'static>> {
         lines.extend(field("Birthday", None, &birthday.to_string()));
     }
     for url in card.urls() {
-        lines.extend(field("URL", None, &url));
+        lines.extend(field("URL", url.label.as_deref(), &url.value));
     }
     if let Some(note) = card.note() {
         lines.push(Line::from("Note"));
