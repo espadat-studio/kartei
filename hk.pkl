@@ -1,0 +1,20 @@
+amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+  ["dprint"] = Builtins.dprint
+  ["clippy"] {
+    check = "cargo clippy --all-targets -- -D warnings"
+  }
+  ["fmt"] {
+    check = "cargo fmt -- --check"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+}

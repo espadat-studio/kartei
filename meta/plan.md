@@ -65,6 +65,7 @@ None.
 ## Commits
 
 Phase 1 card (pure)
+
 1. `feat(card): parse and write content lines losslessly` - line.rs unfold/parse, raw bytes kept; card/mod.rs Card; fixtures folded-photo, lf-endings, utf8-fold-midchar. Tests: fixture byte identity; proptest `write(parse(x)) == x`.
 2. `feat(card): fold and escape edited values` - line.rs fold 75 octets, escape/unescape. Tests: proptest fold <=75 + UTF-8 safe; escape round-trip units.
 3. `feat(card): read name, contact and note fields` - view N, FN, TEL, EMAIL, ORG, NOTE, URL; label.rs decode TYPE + X-ABLabel. Fixtures apple-grouped-labels, company, fn-custom. Tests: expected views; label decode units.
@@ -90,6 +91,7 @@ Phase 3 TUI
 19. `docs: document keymap and usage` - README + docs pages.
 
 Final
+
 - PR review of branch as another engineer.
 - Decide which recommendations to apply; apply; tests green.
 - Remove unnecessary code comments.

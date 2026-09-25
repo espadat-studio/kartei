@@ -32,15 +32,15 @@
 
 ## Writer quirks the TUI will see
 
-| Source | Quirk | Evidence |
-|---|---|---|
-| **Baïkal (sabre/vobject 4.x)** | Serves 4.0 cards as 3.0 by default. On conversion, a year-less BDAY becomes `1604-MM-DD;X-APPLE-OMIT-YEAR=1604`. | [VCardConverter.php L107](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L107); Baïkal pins `sabre/dav ~4.7.1`, which requires `sabre/vobject ^4.2.1` ([composer.json](https://github.com/sabre-io/dav/blob/4.7.1/composer.json)) |
-| Baïkal (sabre) | 4.0 `ANNIVERSARY` becomes `X-ANNIVERSARY`, plus an added `ITEMn.X-ABDATE` and `ITEMn.X-ABLABEL:_$!<Anniversary>!$_` | [L122](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L122) |
-| Baïkal (sabre) | A `data:` URI PHOTO becomes `ENCODING=b` inline binary | [L290-L331](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L290-L331) |
-| Thunderbird | Writes vCard 4.0 by default (`propertyMapToVCard(abProps, version = "4.0")`) | [VCardUtils.sys.mjs L189](https://hg.mozilla.org/comm-central/file/tip/mailnews/addrbook/modules/VCardUtils.sys.mjs) |
-| Apple | `itemN.` groups tie a value to its `X-ABLabel` label. `X-ABUID`, `X-ABADR`, `PHOTO;ENCODING=b;TYPE=JPEG`, repeated `type=` params. | Only through sabre's converter and khard's handling ([contacts.py L162-L180](https://github.com/lucc/khard/blob/main/khard/contacts.py#L162-L180)); no Apple spec found |
-| Google | Not verified: no primary spec found. Treat it as "arbitrary 3.0". | - |
-| vdirsyncer | Writes files with LF, not CRLF ([#1128](https://github.com/pimutils/vdirsyncer/issues/1128)). pimsync normalises to CRLF. | prior research |
+| Source                         | Quirk                                                                                                                              | Evidence                                                                                                                                                                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Baïkal (sabre/vobject 4.x)** | Serves 4.0 cards as 3.0 by default. On conversion, a year-less BDAY becomes `1604-MM-DD;X-APPLE-OMIT-YEAR=1604`.                   | [VCardConverter.php L107](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L107); Baïkal pins `sabre/dav ~4.7.1`, which requires `sabre/vobject ^4.2.1` ([composer.json](https://github.com/sabre-io/dav/blob/4.7.1/composer.json)) |
+| Baïkal (sabre)                 | 4.0 `ANNIVERSARY` becomes `X-ANNIVERSARY`, plus an added `ITEMn.X-ABDATE` and `ITEMn.X-ABLABEL:_$!<Anniversary>!$_`                | [L122](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L122)                                                                                                                                                                       |
+| Baïkal (sabre)                 | A `data:` URI PHOTO becomes `ENCODING=b` inline binary                                                                             | [L290-L331](https://github.com/sabre-io/vobject/blob/4.6.1/lib/VCardConverter.php#L290-L331)                                                                                                                                                             |
+| Thunderbird                    | Writes vCard 4.0 by default (`propertyMapToVCard(abProps, version = "4.0")`)                                                       | [VCardUtils.sys.mjs L189](https://hg.mozilla.org/comm-central/file/tip/mailnews/addrbook/modules/VCardUtils.sys.mjs)                                                                                                                                     |
+| Apple                          | `itemN.` groups tie a value to its `X-ABLabel` label. `X-ABUID`, `X-ABADR`, `PHOTO;ENCODING=b;TYPE=JPEG`, repeated `type=` params. | Only through sabre's converter and khard's handling ([contacts.py L162-L180](https://github.com/lucc/khard/blob/main/khard/contacts.py#L162-L180)); no Apple spec found                                                                                  |
+| Google                         | Not verified: no primary spec found. Treat it as "arbitrary 3.0".                                                                  | -                                                                                                                                                                                                                                                        |
+| vdirsyncer                     | Writes files with LF, not CRLF ([#1128](https://github.com/pimutils/vdirsyncer/issues/1128)). pimsync normalises to CRLF.          | prior research                                                                                                                                                                                                                                           |
 
 - **Consequence:** even with zero Apple devices, a Thunderbird-written 4.0 card with a year-less birthday comes back from Baïkal as an Apple-style 3.0 card. The TUI MUST show `X-APPLE-OMIT-YEAR` dates as year-less and MUST treat `itemN.X-ABLabel` as the label of the grouped field.
 - **Consequence:** the vdir can hold both LF and CRLF files. Keep the EOL per file; never normalise it.
@@ -62,18 +62,18 @@ Tests:
 
 ### Results
 
-| Crate | Version | rt byte-identical | edit ONLY-TARGET | Lines rewritten on Apple card (of 20 logical) | Notes |
-|---|---|---|---|---|---|
-| **vcard-rs** (line API) | 0.4.0 | **5/5** | **10/10** | 0 | Only crate that reads non-UTF-8 input |
-| vcard-rs (lens API `prop_mut::<TEL>()`) | 0.4.0 | 5/5 | 9/10 | 0 | Missed `item2.TEL`: see bug below |
-| **vparser** + 44-line splice | 1.2.1 | 4/5 | 8/10 | 0 | The 2 failures are the non-UTF-8 fixture (input is `&str`) |
-| caldata | 0.17.3 | 1/5 | 3/10 | 7 | Uppercases names, params and groups (`ITEM1.X-ABLABEL`); forces CRLF; refolds |
-| ical_vcard | 0.5.0 | 0/5 | 1/10 | 7 | Uppercases names, params and groups; forces CRLF; refolds |
-| ical | 0.11.0 | 0/5 | 0/10 | 4 | Uppercases params; forces CRLF; cannot read the non-UTF-8 fixture. **Repo archived.** |
-| calcard | 0.3.14 | 0/5 | 0/10 | 5 | See data changes below |
-| vcard4 | 0.7.3 | 0/5 | n/a | 23-line diff (reorders) | Converts 3.0 to `VERSION:4.0` |
-| vobject | 0.9.0 | 0/5 | 0/10 | 26-line diff (reorders all) | `props: BTreeMap`, so output is alphabetical ([component.rs](https://docs.rs/crate/vobject/0.9.0/source/src/component.rs)) |
-| vcard_parser | 0.2.3 | 0/5 (4 parse errors) | n/a | error | Rejects 3.0 and `N` with 6 components |
+| Crate                                   | Version | rt byte-identical    | edit ONLY-TARGET | Lines rewritten on Apple card (of 20 logical) | Notes                                                                                                                      |
+| --------------------------------------- | ------- | -------------------- | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **vcard-rs** (line API)                 | 0.4.0   | **5/5**              | **10/10**        | 0                                             | Only crate that reads non-UTF-8 input                                                                                      |
+| vcard-rs (lens API `prop_mut::<TEL>()`) | 0.4.0   | 5/5                  | 9/10             | 0                                             | Missed `item2.TEL`: see bug below                                                                                          |
+| **vparser** + 44-line splice            | 1.2.1   | 4/5                  | 8/10             | 0                                             | The 2 failures are the non-UTF-8 fixture (input is `&str`)                                                                 |
+| caldata                                 | 0.17.3  | 1/5                  | 3/10             | 7                                             | Uppercases names, params and groups (`ITEM1.X-ABLABEL`); forces CRLF; refolds                                              |
+| ical_vcard                              | 0.5.0   | 0/5                  | 1/10             | 7                                             | Uppercases names, params and groups; forces CRLF; refolds                                                                  |
+| ical                                    | 0.11.0  | 0/5                  | 0/10             | 4                                             | Uppercases params; forces CRLF; cannot read the non-UTF-8 fixture. **Repo archived.**                                      |
+| calcard                                 | 0.3.14  | 0/5                  | 0/10             | 5                                             | See data changes below                                                                                                     |
+| vcard4                                  | 0.7.3   | 0/5                  | n/a              | 23-line diff (reorders)                       | Converts 3.0 to `VERSION:4.0`                                                                                              |
+| vobject                                 | 0.9.0   | 0/5                  | 0/10             | 26-line diff (reorders all)                   | `props: BTreeMap`, so output is alphabetical ([component.rs](https://docs.rs/crate/vobject/0.9.0/source/src/component.rs)) |
+| vcard_parser                            | 0.2.3   | 0/5 (4 parse errors) | n/a              | error                                         | Rejects 3.0 and `N` with 6 components                                                                                      |
 
 **Changes that alter data (not just cosmetic):**
 
@@ -100,18 +100,18 @@ Tests:
 
 ### Crate health (crates.io API and `gh api`, 2026-09-25)
 
-| Crate | License | Latest | First release | Downloads (90d) | Commits in 12 mo | Top author | 3.0 / 4.0 | Keeps unknown props / params / groups | Keeps order and format |
-|---|---|---|---|---|---|---|---|---|---|
-| [vcard-rs](https://github.com/pimalaya/vcard) | MIT OR Apache-2.0 | 0.4.0 (2026-08-31) | 2026-07-16 | 287 (287) | 76 | soywod 76/76, 1★ | 2.1, 3.0, 4.0 | yes / yes / yes | **yes, byte-faithful** |
-| [vparser](https://crates.io/crates/vparser) | ISC | 1.2.1 (2026-04-10) | 2023-11-27 | 12,082 (617) | not checked (sr.ht) | Hugo Barrera | version-agnostic tokenizer | yes (raw lines) | yes (raw slices) |
-| [calcard](https://github.com/stalwartlabs/calcard) | Apache-2.0 OR MIT | 0.3.14 (2026-09-15) | 2025-05-10 | 55,903 (19,853) | 37 | mdecimus, 75★ | 2.1–4.0 | yes / yes / yes | no |
-| [caldata](https://github.com/lennart-k/caldata-rs) | Apache-2.0 | 0.17.3 (2026-09-20) | 2026-01-22 | 2,289 (1,083) | 189 | Lennart K (fork of ical-rs) | agnostic | yes / yes / name-prefixed | no |
-| [ical_vcard](https://codeberg.org/darkfire/ical_vcard) | MIT OR Apache-2.0 | 0.5.0 (2026-08-14) | 2023-03-28 | 20,670 (296) | 50 | darkfireZZ 40 | content lines only | yes / yes / yes | no |
-| [ical](https://github.com/Peltoche/ical-rs) | Apache-2.0 | 0.11.0 (2024-03-13) | 2016 | 1.55 M (277 k) | 0, **archived** | - | agnostic | yes / yes / name-prefixed | no |
-| [vcard4](https://github.com/tmpfs/vcard4) | MIT OR Apache-2.0 | 0.7.3 (2026-02-07) | 2022-11-09 | 51,318 (7,865) | 2 | muji, 4★ | 4.0 only | partial | no |
-| [vobject](https://github.com/untitaker/rust-vobject) | MIT | 0.9.0 (2026-04-01) | 2015 | 42,840 (951) | 3 | Ben Boeckel | agnostic | props yes, repeated params **no** | no |
-| [vcard_parser](https://github.com/kenianbei/vcard_parser) | MIT | 0.2.3 (2026-05-30) | 2022-10-13 | 27,167 (11,333) | 3 | kenianbei | 4.0 only | - | no |
-| [vcard](https://github.com/magiclen/vcard) (magiclen) | MIT | 0.5.0 (2026-07-11) | 2018 | 53,993 | 5 | Magic Len | 4.0 generator | - | not tested (builder/generator) |
+| Crate                                                     | License           | Latest              | First release | Downloads (90d) | Commits in 12 mo    | Top author                  | 3.0 / 4.0                  | Keeps unknown props / params / groups | Keeps order and format         |
+| --------------------------------------------------------- | ----------------- | ------------------- | ------------- | --------------- | ------------------- | --------------------------- | -------------------------- | ------------------------------------- | ------------------------------ |
+| [vcard-rs](https://github.com/pimalaya/vcard)             | MIT OR Apache-2.0 | 0.4.0 (2026-08-31)  | 2026-07-16    | 287 (287)       | 76                  | soywod 76/76, 1★            | 2.1, 3.0, 4.0              | yes / yes / yes                       | **yes, byte-faithful**         |
+| [vparser](https://crates.io/crates/vparser)               | ISC               | 1.2.1 (2026-04-10)  | 2023-11-27    | 12,082 (617)    | not checked (sr.ht) | Hugo Barrera                | version-agnostic tokenizer | yes (raw lines)                       | yes (raw slices)               |
+| [calcard](https://github.com/stalwartlabs/calcard)        | Apache-2.0 OR MIT | 0.3.14 (2026-09-15) | 2025-05-10    | 55,903 (19,853) | 37                  | mdecimus, 75★               | 2.1–4.0                    | yes / yes / yes                       | no                             |
+| [caldata](https://github.com/lennart-k/caldata-rs)        | Apache-2.0        | 0.17.3 (2026-09-20) | 2026-01-22    | 2,289 (1,083)   | 189                 | Lennart K (fork of ical-rs) | agnostic                   | yes / yes / name-prefixed             | no                             |
+| [ical_vcard](https://codeberg.org/darkfire/ical_vcard)    | MIT OR Apache-2.0 | 0.5.0 (2026-08-14)  | 2023-03-28    | 20,670 (296)    | 50                  | darkfireZZ 40               | content lines only         | yes / yes / yes                       | no                             |
+| [ical](https://github.com/Peltoche/ical-rs)               | Apache-2.0        | 0.11.0 (2024-03-13) | 2016          | 1.55 M (277 k)  | 0, **archived**     | -                           | agnostic                   | yes / yes / name-prefixed             | no                             |
+| [vcard4](https://github.com/tmpfs/vcard4)                 | MIT OR Apache-2.0 | 0.7.3 (2026-02-07)  | 2022-11-09    | 51,318 (7,865)  | 2                   | muji, 4★                    | 4.0 only                   | partial                               | no                             |
+| [vobject](https://github.com/untitaker/rust-vobject)      | MIT               | 0.9.0 (2026-04-01)  | 2015          | 42,840 (951)    | 3                   | Ben Boeckel                 | agnostic                   | props yes, repeated params **no**     | no                             |
+| [vcard_parser](https://github.com/kenianbei/vcard_parser) | MIT               | 0.2.3 (2026-05-30)  | 2022-10-13    | 27,167 (11,333) | 3                   | kenianbei                   | 4.0 only                   | -                                     | no                             |
+| [vcard](https://github.com/magiclen/vcard) (magiclen)     | MIT               | 0.5.0 (2026-07-11)  | 2018          | 53,993          | 5                   | Magic Len                   | 4.0 generator              | -                                     | not tested (builder/generator) |
 
 - vcard-rs's AI disclosure: "Pimalaya projects are developed with AI assistance … Claude Code … Not used for: Engineering, critical code" ([AI_POLICY.md](https://github.com/pimalaya/.github/blob/master/AI_POLICY.md)). There were 4 minor releases (0.1 to 0.4) in 6 weeks, with a `**BREAKING**` entry in 0.4.0 and 0.3.1 ([CHANGELOG](https://docs.rs/crate/vcard-rs/0.4.0/source/CHANGELOG.md)).
 - `vparser` is the tokenizer under `vstorage` 0.11, which pimsync 0.6 uses (pimsync `Cargo.lock` pins `vparser 1.1.0`). It has been 1.x since 2023-12-21.
@@ -132,14 +132,14 @@ Tests:
 
 ## Prior art: what to steal, what to avoid
 
-| Tool | Steal | Avoid |
-|---|---|---|
-| abook 0.6.2 ([help.h](https://git.code.sf.net/p/abook/git)) | `j/k`, `/` search, `\` next match, `Enter` view, `a` add, `r`/`Del` remove, `space` select, `M` merge selected, `U` remove duplicates, `m` mail, `v` open URL; field hotkeys `1-5`/`A-Z` in the detail view; `u` undo | Its own flat-file format; vCard only via `--convert` (lossy) |
-| khard 0.21.0 | Field-scoped queries (`email:`, `name:`, `uid:`); `birthdays`; `--parsable` output; YAML-in-`$EDITOR` editing | Delete-and-re-add of every modelled field; 1900 placeholder year |
-| aerc 0.22.0 | Contract: `address-book-cmd`, `%s` = text after the last comma, run via `sh -c`, tab-separated, email first, name second, extra fields ignored ([aerc-config(5)](https://git.sr.ht/~rjarry/aerc/tree/master/item/doc/aerc-config.5.scd)) | - |
-| mutt | Contract: `query_command`. The first line is a message and is skipped; then `address\tname\tother`; exit non-zero on no match ([manual §4.8](http://www.mutt.org/doc/manual/#query)) | - |
-| rldx (source read at `d1365f6`, 2026-01-11, 15,697 LOC) | Keymap (`/`, `h/l` panes, `e` edit field, `y` yank); abook-compatible `query`; atomic write via tmp + `sync_all` + rename + dir fsync ([vdir.rs L276-L337](https://github.com/verdigris12/rldx/blob/d1365f6/src/vdir.rs#L276-L337)) | See below |
-| cardamum 0.2.0 | Raw `.vcf` in `$EDITOR` with validate-on-save | Talks CardDAV directly, basic auth only |
+| Tool                                                        | Steal                                                                                                                                                                                                                                    | Avoid                                                            |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| abook 0.6.2 ([help.h](https://git.code.sf.net/p/abook/git)) | `j/k`, `/` search, `\` next match, `Enter` view, `a` add, `r`/`Del` remove, `space` select, `M` merge selected, `U` remove duplicates, `m` mail, `v` open URL; field hotkeys `1-5`/`A-Z` in the detail view; `u` undo                    | Its own flat-file format; vCard only via `--convert` (lossy)     |
+| khard 0.21.0                                                | Field-scoped queries (`email:`, `name:`, `uid:`); `birthdays`; `--parsable` output; YAML-in-`$EDITOR` editing                                                                                                                            | Delete-and-re-add of every modelled field; 1900 placeholder year |
+| aerc 0.22.0                                                 | Contract: `address-book-cmd`, `%s` = text after the last comma, run via `sh -c`, tab-separated, email first, name second, extra fields ignored ([aerc-config(5)](https://git.sr.ht/~rjarry/aerc/tree/master/item/doc/aerc-config.5.scd)) | -                                                                |
+| mutt                                                        | Contract: `query_command`. The first line is a message and is skipped; then `address\tname\tother`; exit non-zero on no match ([manual §4.8](http://www.mutt.org/doc/manual/#query))                                                     | -                                                                |
+| rldx (source read at `d1365f6`, 2026-01-11, 15,697 LOC)     | Keymap (`/`, `h/l` panes, `e` edit field, `y` yank); abook-compatible `query`; atomic write via tmp + `sync_all` + rename + dir fsync ([vdir.rs L276-L337](https://github.com/verdigris12/rldx/blob/d1365f6/src/vdir.rs#L276-L337))      | See below                                                        |
+| cardamum 0.2.0                                              | Raw `.vcf` in `$EDITOR` with validate-on-save                                                                                                                                                                                            | Talks CardDAV directly, basic auth only                          |
 
 **What rldx gets wrong:**
 
@@ -159,18 +159,18 @@ Tests:
 
 ### MVP
 
-| Feature | Why |
-|---|---|
-| Fuzzy list (FN, NICKNAME, ORG, EMAIL, TEL in the haystack) | Main use: find a contact in under 1 s. `nucleo-matcher` scores 1,000 items in well under one frame. |
-| Detail pane | Read without editing. Show labels from `itemN.X-ABLabel`, year-less BDAY from `X-APPLE-OMIT-YEAR`/`--MMDD`, and a list of unknown properties so nothing is hidden. |
-| Edit one field inline (`e`) | This is the differentiator. It touches exactly one line; everything else stays byte-identical. |
-| Raw `$EDITOR` fallback (`E`) | Covers every property the forms don't model. Validate by re-parsing before the atomic write. Fallback order: `$VISUAL`, `$EDITOR`, `vi`, the same as aerc ([aerc-config(5)](https://git.sr.ht/~rjarry/aerc/tree/master/item/doc/aerc-config.5.scd)). |
-| Create (`a`) | Writes a new UUID `UID`, `FN`, `N`, `VERSION:3.0`, CRLF. The filename is `<UID>.vcf` when the UID is `[A-Za-z0-9_+-]`, matching vstorage's `SAFE_FILENAME_CHARS`. |
-| Delete (`d`, with confirm) | Unlink only; the syncer propagates it. vdirsyncer's `StorageEmpty` and pimsync's `on_empty skip` guard against mass deletes. |
-| Atomic write | Required by the vdir spec. Also needed for change detection: vstorage's etag is `"{mtime_secs};{ino}"`, so an in-place write within the same second would be missed ([vdir.rs](https://docs.rs/crate/vstorage/0.11.0/source/src/vdir.rs)). A rename gives a new inode. |
-| File watch and reload | The syncer (a `pimsync daemon` or a timer) rewrites files while the TUI is open. `notify-debouncer-full` coalesces tmp + rename bursts. |
-| Conflict check on save | See the architecture section. Without it, a save clobbers a server-side change. |
-| `query <text>` subcommand | For aerc/mutt completion. `--mutt` prints the header line and exits 1 on no match. The default (aerc) prints no header. One line per EMAIL: `email\tFN`. |
+| Feature                                                    | Why                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fuzzy list (FN, NICKNAME, ORG, EMAIL, TEL in the haystack) | Main use: find a contact in under 1 s. `nucleo-matcher` scores 1,000 items in well under one frame.                                                                                                                                                                    |
+| Detail pane                                                | Read without editing. Show labels from `itemN.X-ABLabel`, year-less BDAY from `X-APPLE-OMIT-YEAR`/`--MMDD`, and a list of unknown properties so nothing is hidden.                                                                                                     |
+| Edit one field inline (`e`)                                | This is the differentiator. It touches exactly one line; everything else stays byte-identical.                                                                                                                                                                         |
+| Raw `$EDITOR` fallback (`E`)                               | Covers every property the forms don't model. Validate by re-parsing before the atomic write. Fallback order: `$VISUAL`, `$EDITOR`, `vi`, the same as aerc ([aerc-config(5)](https://git.sr.ht/~rjarry/aerc/tree/master/item/doc/aerc-config.5.scd)).                   |
+| Create (`a`)                                               | Writes a new UUID `UID`, `FN`, `N`, `VERSION:3.0`, CRLF. The filename is `<UID>.vcf` when the UID is `[A-Za-z0-9_+-]`, matching vstorage's `SAFE_FILENAME_CHARS`.                                                                                                      |
+| Delete (`d`, with confirm)                                 | Unlink only; the syncer propagates it. vdirsyncer's `StorageEmpty` and pimsync's `on_empty skip` guard against mass deletes.                                                                                                                                           |
+| Atomic write                                               | Required by the vdir spec. Also needed for change detection: vstorage's etag is `"{mtime_secs};{ino}"`, so an in-place write within the same second would be missed ([vdir.rs](https://docs.rs/crate/vstorage/0.11.0/source/src/vdir.rs)). A rename gives a new inode. |
+| File watch and reload                                      | The syncer (a `pimsync daemon` or a timer) rewrites files while the TUI is open. `notify-debouncer-full` coalesces tmp + rename bursts.                                                                                                                                |
+| Conflict check on save                                     | See the architecture section. Without it, a save clobbers a server-side change.                                                                                                                                                                                        |
+| `query <text>` subcommand                                  | For aerc/mutt completion. `--mutt` prints the header line and exits 1 on no match. The default (aerc) prints no header. One line per EMAIL: `email\tFN`.                                                                                                               |
 
 ### Later
 
@@ -188,22 +188,22 @@ Tests:
 
 ## Stack
 
-| Concern | Crate | Version (date) | 12-month commits | Downloads (90d) | Pick |
-|---|---|---|---|---|---|
-| TUI | [ratatui](https://github.com/ratatui/ratatui) | 0.30.2 (2026-06-19) | 449 | 18.9 M | **yes** |
-| Terminal | [crossterm](https://github.com/crossterm-rs/crossterm) | 0.29.0 (2025-04-05) | 31 | 45.6 M | **yes** (ratatui's default backend) |
-| Fuzzy | [nucleo-matcher](https://github.com/helix-editor/nucleo) | 0.3.1 (2024-02-20) | 3 | 1.77 M | **yes**: single-threaded, no worker pool, and a quiet repo is fine for a finished algorithm. The `nucleo` wrapper (0.5.0) adds threading you don't need at 1k items. |
-| Fuzzy (alt.) | [frizbee](https://github.com/saghen/frizbee) | 0.13.0 (2026-08-13) | 252 | 1.06 M | active SIMD Smith-Waterman; swap in if nucleo rots |
-| Fuzzy (no) | [skim](https://github.com/skim-rs/skim) | 5.7.1 | 446 | 200 k | a full fzf clone; too heavy to embed |
-| Fuzzy (no) | [fuzzy-matcher](https://github.com/lotabout/fuzzy-matcher) | 0.3.7 (2020) | 0, **archived** | 8.5 M | no |
-| Single-line input | [tui-input](https://github.com/sayanarijit/tui-input) | 0.15.4 (2026-08-10) | 19 | 516 k | **yes** for field edits (rldx uses it) |
-| Multi-line (NOTE) | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea) | 0.9.2 (2026-06-12) | 25 | 471 k | **yes**: the ratatui-org fork of `tui-textarea`. The original has 0 commits in 12 months and a "Fork: ratatui-textarea" issue (#125). |
-| Multi-line (alt.) | [edtui](https://github.com/preiter93/edtui) | 0.11.7 (2026-08-16) | 128 | 135 k | vim modal editing; later, if wanted |
-| Watch | [notify](https://github.com/notify-rs/notify) + [notify-debouncer-full](https://crates.io/crates/notify-debouncer-full) | 8.2.0 / 0.7.0 | 251 | 39 M / 4.7 M | **yes** |
-| Atomic write | [tempfile](https://github.com/Stebalien/tempfile) `NamedTempFile::new_in(dir)` + `persist` | 3.27.0 | 73 | 188 M | **yes**. Name the temp file `.*.tmp` so readers skip it. Also fsync the dir. [atomic-write-file](https://github.com/andreacorbellini/rust-atomic-write-file) 0.3.1 (7 commits) does the same; tempfile is already in most trees. |
-| Config | [toml](https://github.com/toml-rs/toml) | 1.1.6 (2026-09-10) | - | 228 M | **yes**; paths via [etcetera](https://crates.io/crates/etcetera) 0.11.0 (XDG) |
-| CLI | [clap](https://github.com/clap-rs/clap) | 4.6.7 | - | 237 M | **yes** (the user already uses it in auberge) |
-| vCard | vcard-rs | =0.4.0 | 76 | 287 | **yes, pinned** (see verdict) |
+| Concern           | Crate                                                                                                                   | Version (date)      | 12-month commits | Downloads (90d) | Pick                                                                                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TUI               | [ratatui](https://github.com/ratatui/ratatui)                                                                           | 0.30.2 (2026-06-19) | 449              | 18.9 M          | **yes**                                                                                                                                                                                                                          |
+| Terminal          | [crossterm](https://github.com/crossterm-rs/crossterm)                                                                  | 0.29.0 (2025-04-05) | 31               | 45.6 M          | **yes** (ratatui's default backend)                                                                                                                                                                                              |
+| Fuzzy             | [nucleo-matcher](https://github.com/helix-editor/nucleo)                                                                | 0.3.1 (2024-02-20)  | 3                | 1.77 M          | **yes**: single-threaded, no worker pool, and a quiet repo is fine for a finished algorithm. The `nucleo` wrapper (0.5.0) adds threading you don't need at 1k items.                                                             |
+| Fuzzy (alt.)      | [frizbee](https://github.com/saghen/frizbee)                                                                            | 0.13.0 (2026-08-13) | 252              | 1.06 M          | active SIMD Smith-Waterman; swap in if nucleo rots                                                                                                                                                                               |
+| Fuzzy (no)        | [skim](https://github.com/skim-rs/skim)                                                                                 | 5.7.1               | 446              | 200 k           | a full fzf clone; too heavy to embed                                                                                                                                                                                             |
+| Fuzzy (no)        | [fuzzy-matcher](https://github.com/lotabout/fuzzy-matcher)                                                              | 0.3.7 (2020)        | 0, **archived**  | 8.5 M           | no                                                                                                                                                                                                                               |
+| Single-line input | [tui-input](https://github.com/sayanarijit/tui-input)                                                                   | 0.15.4 (2026-08-10) | 19               | 516 k           | **yes** for field edits (rldx uses it)                                                                                                                                                                                           |
+| Multi-line (NOTE) | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea)                                                         | 0.9.2 (2026-06-12)  | 25               | 471 k           | **yes**: the ratatui-org fork of `tui-textarea`. The original has 0 commits in 12 months and a "Fork: ratatui-textarea" issue (#125).                                                                                            |
+| Multi-line (alt.) | [edtui](https://github.com/preiter93/edtui)                                                                             | 0.11.7 (2026-08-16) | 128              | 135 k           | vim modal editing; later, if wanted                                                                                                                                                                                              |
+| Watch             | [notify](https://github.com/notify-rs/notify) + [notify-debouncer-full](https://crates.io/crates/notify-debouncer-full) | 8.2.0 / 0.7.0       | 251              | 39 M / 4.7 M    | **yes**                                                                                                                                                                                                                          |
+| Atomic write      | [tempfile](https://github.com/Stebalien/tempfile) `NamedTempFile::new_in(dir)` + `persist`                              | 3.27.0              | 73               | 188 M           | **yes**. Name the temp file `.*.tmp` so readers skip it. Also fsync the dir. [atomic-write-file](https://github.com/andreacorbellini/rust-atomic-write-file) 0.3.1 (7 commits) does the same; tempfile is already in most trees. |
+| Config            | [toml](https://github.com/toml-rs/toml)                                                                                 | 1.1.6 (2026-09-10)  | -                | 228 M           | **yes**; paths via [etcetera](https://crates.io/crates/etcetera) 0.11.0 (XDG)                                                                                                                                                    |
+| CLI               | [clap](https://github.com/clap-rs/clap)                                                                                 | 4.6.7               | -                | 237 M           | **yes** (the user already uses it in auberge)                                                                                                                                                                                    |
+| vCard             | vcard-rs                                                                                                                | =0.4.0              | 76               | 287             | **yes, pinned** (see verdict)                                                                                                                                                                                                    |
 
 ## Architecture sketch
 
@@ -275,15 +275,15 @@ flowchart LR
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| vcard-rs abandoned or churns its API (4 minors in 6 weeks, bus factor 1) | medium | medium | Pin `=0.4.0`; keep it inside `card.rs`; the vparser fallback costs about 800 LOC |
-| vcard-rs has a subtle byte-faithfulness bug (AI-assisted, 1★, 287 downloads) | low–medium | high | Run a `check` subcommand on the real vdir before the first write: assert `to_bytes(parse(b)) == b` for every file; differential test against the vparser splice; open the lens-group bug upstream |
-| Syncer writes a file mid-edit | high with `pimsync daemon` | high | Hash compare-and-swap, three-way merge, prompt |
-| Year-less BDAY shown with year 1604 | certain for sabre-converted cards | low | Decode `X-APPLE-OMIT-YEAR` and `--MMDD` in the view layer; never write it back unless edited |
-| Editing a grouped field breaks its label | medium | low | Edit through the line API; show and edit `itemN.X-ABLabel` together with its sibling |
-| sabre re-serializes on PUT when validation warns, so stored bytes differ from ours | medium | low | Expected: the syncer re-downloads, and the TUI sees a watch event (prior research, [Plugin.php L308-L386](https://github.com/sabre-io/dav/blob/4.7.1/lib/CardDAV/Plugin.php#L308-L386)) |
-| An edited line stays unfolded past 75 octets | certain with vcard-rs | very low | RFC says SHOULD; add a refold later |
+| Risk                                                                               | Likelihood                        | Impact   | Mitigation                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| vcard-rs abandoned or churns its API (4 minors in 6 weeks, bus factor 1)           | medium                            | medium   | Pin `=0.4.0`; keep it inside `card.rs`; the vparser fallback costs about 800 LOC                                                                                                                  |
+| vcard-rs has a subtle byte-faithfulness bug (AI-assisted, 1★, 287 downloads)       | low–medium                        | high     | Run a `check` subcommand on the real vdir before the first write: assert `to_bytes(parse(b)) == b` for every file; differential test against the vparser splice; open the lens-group bug upstream |
+| Syncer writes a file mid-edit                                                      | high with `pimsync daemon`        | high     | Hash compare-and-swap, three-way merge, prompt                                                                                                                                                    |
+| Year-less BDAY shown with year 1604                                                | certain for sabre-converted cards | low      | Decode `X-APPLE-OMIT-YEAR` and `--MMDD` in the view layer; never write it back unless edited                                                                                                      |
+| Editing a grouped field breaks its label                                           | medium                            | low      | Edit through the line API; show and edit `itemN.X-ABLabel` together with its sibling                                                                                                              |
+| sabre re-serializes on PUT when validation warns, so stored bytes differ from ours | medium                            | low      | Expected: the syncer re-downloads, and the TUI sees a watch event (prior research, [Plugin.php L308-L386](https://github.com/sabre-io/dav/blob/4.7.1/lib/CardDAV/Plugin.php#L308-L386))           |
+| An edited line stays unfolded past 75 octets                                       | certain with vcard-rs             | very low | RFC says SHOULD; add a refold later                                                                                                                                                               |
 
 ## Open questions
 
