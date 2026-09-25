@@ -9,10 +9,10 @@ use crate::card::Card;
 use crate::form::Form;
 use crate::vdir::Conflict;
 
-const HINTS: &str = " j/k move  / search  e edit  n new  ? help  q quit";
-const EDIT_HINTS: &str =
-    " Tab/S-Tab move  Alt-a/d add/remove  Alt-l label  Ctrl-s save  Esc cancel";
+const HINTS: &str = " / search  e edit  n new  y copy  ? help  q quit";
+const EDIT_HINTS: &str = " Ctrl-s save  Esc cancel  Tab move  Alt-a/d add/remove  Alt-l label";
 const LABEL_WIDTH: u16 = 13;
+const ANY_KEY: &str = " any key closes ";
 
 const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
@@ -23,6 +23,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("/", "search"),
             ("e/Enter", "edit card"),
             ("n", "new card"),
+            ("y", "copy a value"),
             ("R", "reload from disk"),
             ("!", "list skipped cards"),
             ("?", "show keys"),
@@ -57,6 +58,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("Esc", "keep editing"),
         ],
     ),
+    ("Copy", &[("1-9", "copy value"), ("Esc", "cancel")]),
     ("Prompt, Help", &[("any key", "close")]),
 ];
 
@@ -89,6 +91,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
     let hints = match app.mode() {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
+        Mode::Copy => " 1-9 copy  Esc close".to_owned(),
         Mode::Edit => EDIT_HINTS.to_owned(),
         Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
         Mode::Conflict(Conflict::Changed) => {
@@ -99,17 +102,21 @@ pub fn draw(frame: &mut Frame, app: &App) {
         }
         _ => HINTS.to_owned(),
     };
-    let hints = match app.error() {
-        Some(error) => Paragraph::new(format!(" {error}")).style(Color::Red),
-        None => Paragraph::new(hints),
+    let hints = match (app.error(), app.status()) {
+        (Some(error), _) => Paragraph::new(format!(" {error}")).style(Color::Red),
+        (None, Some(status)) => Paragraph::new(format!(" {status}")),
+        (None, None) => Paragraph::new(hints),
     };
-    frame.render_widget(hints, status);
-    if let Some(skipped) = skipped_count(app.skipped().len()) {
-        frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
-    }
+    let count = skipped_count(app.skipped().len()).unwrap_or_default();
+    let [hints_area, count_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(count.len() as u16)])
+            .areas(status);
+    frame.render_widget(hints, hints_area);
+    frame.render_widget(Paragraph::new(count), count_area);
     match app.mode() {
-        Mode::Prompt => draw_overlay(frame, "Skipped cards", vec![skipped(app)]),
-        Mode::Help => draw_overlay(frame, "Keys", keymap()),
+        Mode::Prompt => draw_overlay(frame, "Skipped cards", ANY_KEY, vec![skipped(app)]),
+        Mode::Help => draw_overlay(frame, "Keys", ANY_KEY, keymap()),
+        Mode::Copy => draw_overlay(frame, "Copy", " 1-9 copy  Esc close ", vec![copyable(app)]),
         Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard | Mode::Conflict(_) => {}
     }
 }
@@ -154,6 +161,17 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     }
 }
 
+fn copyable(app: &App) -> Vec<Line<'static>> {
+    app.copyable()
+        .into_iter()
+        .zip(1..)
+        .map(|((kind, label, value), n)| {
+            let value = value.replace('\n', ", ");
+            Line::from(format!("{n}  {}  {value}", heading(kind, label.as_deref())))
+        })
+        .collect()
+}
+
 fn skipped(app: &App) -> Vec<Line<'static>> {
     app.skipped()
         .iter()
@@ -183,11 +201,9 @@ fn keymap() -> Vec<Vec<Line<'static>>> {
         .into()
 }
 
-fn draw_overlay(frame: &mut Frame, title: &str, columns: Vec<Vec<Line>>) {
+fn draw_overlay(frame: &mut Frame, title: &str, footer: &str, columns: Vec<Vec<Line>>) {
     let area = frame.area().inner(Margin::new(2, 1));
-    let block = Block::bordered()
-        .title(title)
-        .title_bottom(" any key closes ");
+    let block = Block::bordered().title(title).title_bottom(footer);
     frame.render_widget(Clear, area);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -220,15 +236,7 @@ fn details(card: &Card) -> Vec<Line<'static>> {
     }
     for address in card.addresses() {
         lines.push(Line::from(heading("Address", address.label.as_deref())));
-        let adr = address.value;
-        let place = [adr.postal_code, adr.city]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let parts = [adr.street, place, adr.region, adr.country];
-        let parts: Vec<_> = parts.into_iter().filter(|p| !p.is_empty()).collect();
-        lines.extend(indented(&parts.join("\n")));
+        lines.extend(indented(&address.value.to_string()));
     }
     if let Some(birthday) = card.birthday() {
         lines.extend(field("Birthday", None, &birthday.to_string()));

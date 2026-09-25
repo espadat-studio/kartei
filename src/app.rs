@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::card::Card;
 use crate::form::Form;
+use crate::osc52;
 use crate::vdir::{self, AddressBook, Conflict, Skipped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +15,7 @@ pub enum Mode {
     Edit,
     Discard,
     Conflict(Conflict),
+    Copy,
     Prompt,
     Help,
 }
@@ -41,6 +43,8 @@ pub struct App {
     mode: Mode,
     draft: Option<Draft>,
     error: Option<String>,
+    status: Option<&'static str>,
+    clipboard: Option<String>,
     should_quit: bool,
 }
 
@@ -62,18 +66,22 @@ impl App {
             mode: Mode::Browse,
             draft: None,
             error: None,
+            status: None,
+            clipboard: None,
             should_quit: false,
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
         self.error = None;
+        self.status = None;
         match self.mode {
             Mode::Browse => self.browse(key),
             Mode::Search => self.search(key),
             Mode::Edit => self.edit(key),
             Mode::Discard => self.discard(key),
             Mode::Conflict(_) => self.conflict(key),
+            Mode::Copy => self.copy(key),
             Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
         }
     }
@@ -89,6 +97,7 @@ impl App {
             KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
             KeyCode::Char('n') => self.new_card(),
             KeyCode::Char('R') => self.reload(self.selected_path()),
+            KeyCode::Char('y') if !self.copyable().is_empty() => self.mode = Mode::Copy,
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
             KeyCode::Char('q') => self.should_quit = true,
@@ -162,6 +171,21 @@ impl App {
             }
             KeyCode::Char('o') => self.write(),
             KeyCode::Esc => self.mode = Mode::Edit,
+            _ => {}
+        }
+    }
+
+    fn copy(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char(c @ '1'..='9') => {
+                let n = c as usize - '1' as usize;
+                if let Some((_, _, value)) = self.copyable().get(n) {
+                    self.clipboard = Some(osc52::sequence(value));
+                    self.status = Some("copied");
+                    self.mode = Mode::Browse;
+                }
+            }
+            KeyCode::Esc => self.mode = Mode::Browse,
             _ => {}
         }
     }
@@ -259,6 +283,40 @@ impl App {
 
     pub fn selected_card(&self) -> Option<&Card> {
         self.visible.get(self.selected).map(|&i| &self.cards[i].1)
+    }
+
+    pub fn copyable(&self) -> Vec<(&'static str, Option<String>, String)> {
+        let Some(card) = self.selected_card() else {
+            return Vec::new();
+        };
+        let phones = card
+            .phones()
+            .into_iter()
+            .map(|v| ("Phone", v.label, v.value));
+        let emails = card
+            .emails()
+            .into_iter()
+            .map(|v| ("Email", v.label, v.value));
+        let addresses = card
+            .addresses()
+            .into_iter()
+            .map(|v| ("Address", v.label, v.value.to_string()));
+        let urls = card.urls().into_iter().map(|url| ("URL", None, url));
+        phones
+            .chain(emails)
+            .chain(addresses)
+            .chain(urls)
+            .filter(|(_, _, value)| !value.is_empty())
+            .take(9)
+            .collect()
+    }
+
+    pub fn take_clipboard(&mut self) -> Option<String> {
+        self.clipboard.take()
+    }
+
+    pub fn status(&self) -> Option<&str> {
+        self.status
     }
 
     pub fn form(&self) -> Option<&Form> {

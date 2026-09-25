@@ -1231,3 +1231,36 @@ fn shift_r_reloads_cards_added_changed_or_removed_on_disk() {
     assert_eq!(app.selected_card().unwrap().display_name(), "Rob Brown");
     assert_eq!(app.skipped().len(), 1);
 }
+
+#[test]
+fn y_then_a_digit_emits_osc_52_with_that_value_and_reports_copied() {
+    let mut app = open("copy");
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.mode(), Mode::Copy);
+    let screen = screen(&app);
+    assert_shows(
+        &screen.join("\n"),
+        &["1  Phone  +1 555 0001", "2  Email  info@acme.example"],
+    );
+
+    press(&mut app, KeyCode::Char('2'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        app.take_clipboard().as_deref(),
+        Some("\x1b]52;c;aW5mb0BhY21lLmV4YW1wbGU=\x07")
+    );
+    assert_eq!(app.take_clipboard(), None);
+    assert!(self::screen(&app).last().unwrap().contains("copied"));
+}
+
+#[test]
+fn esc_closes_the_copy_prompt_without_emitting() {
+    let mut app = open("copy-esc");
+    press(&mut app, KeyCode::Char('y'));
+    press(&mut app, KeyCode::Char('9'));
+    assert_eq!(app.mode(), Mode::Copy);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(app.take_clipboard(), None);
+    assert!(!screen(&app).last().unwrap().contains("copied"));
+}

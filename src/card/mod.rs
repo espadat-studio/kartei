@@ -43,6 +43,20 @@ impl Address {
     }
 }
 
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let place = [&self.postal_code, &self.city]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let parts = [self.street.as_str(), &place, &self.region, &self.country];
+        let parts: Vec<&str> = parts.into_iter().filter(|p| !p.is_empty()).collect();
+        f.write_str(&parts.join("\n"))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Organization {
     pub company: String,

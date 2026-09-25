@@ -1,5 +1,5 @@
 use std::env;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -38,6 +38,10 @@ fn run(terminal: &mut DefaultTerminal, mut app: App) -> io::Result<()> {
             && key.kind == KeyEventKind::Press
         {
             app.handle_key(key);
+        }
+        if let Some(sequence) = app.take_clipboard() {
+            terminal.backend_mut().write_all(sequence.as_bytes())?;
+            terminal.backend_mut().flush()?;
         }
     }
     Ok(())

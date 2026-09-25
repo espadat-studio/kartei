@@ -13,13 +13,13 @@ Keys are fixed. The status bar shows the ones that apply in the current mode.
 | `/`                | Search               |
 | `e` / `Enter`      | Edit focused contact |
 | `n`                | New contact          |
-| `y`                | Copy focused value   |
+| `y`                | Copy a value         |
 | `R`                | Reload all from disk |
 | `!`                | List skipped files   |
 | `?`                | Help                 |
 | `q`                | Quit                 |
 
-`y` copies through the terminal with OSC 52. The status shows "copied" as soon as the sequence is sent, even if the terminal ignores it.
+`y` lists the contact's phones, emails, addresses and URLs, numbered 1 to 9. Pressing a digit copies that value through the terminal with OSC 52, so it works over SSH and in tmux (with `set-clipboard on`). `Esc` closes the list. The status shows "copied" as soon as the sequence is sent, even if the terminal ignores it.
 
 ## Search
 
