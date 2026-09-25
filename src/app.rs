@@ -3,10 +3,17 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use crate::card::Card;
 use crate::vdir::{AddressBook, Skipped};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Browse,
+    Prompt,
+}
+
 pub struct App {
     cards: Vec<Card>,
     skipped: Vec<Skipped>,
     selected: usize,
+    mode: Mode,
     should_quit: bool,
 }
 
@@ -18,17 +25,23 @@ impl App {
             cards,
             skipped,
             selected: 0,
+            mode: Mode::Browse,
             should_quit: false,
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        if self.mode == Mode::Prompt {
+            self.mode = Mode::Browse;
+            return;
+        }
         let last = self.cards.len().saturating_sub(1);
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.selected = (self.selected + 1).min(last),
             KeyCode::Char('k') | KeyCode::Up => self.selected = self.selected.saturating_sub(1),
             KeyCode::Char('g') => self.selected = 0,
             KeyCode::Char('G') => self.selected = last,
+            KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
             KeyCode::Char('q') => self.should_quit = true,
             _ => {}
         }
@@ -48,6 +61,10 @@ impl App {
 
     pub fn selected_card(&self) -> Option<&Card> {
         self.cards.get(self.selected)
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 
     pub fn should_quit(&self) -> bool {

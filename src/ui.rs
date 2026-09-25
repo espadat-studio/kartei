@@ -1,10 +1,10 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Margin};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, List, ListState, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 
-use crate::app::App;
+use crate::app::{App, Mode};
 use crate::card::Card;
 
 const HINTS: &str = " j/k move  g/G top/bottom  q quit";
@@ -31,13 +31,39 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if let Some(skipped) = skipped_count(app.skipped().len()) {
         frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
     }
+    if app.mode() == Mode::Prompt {
+        draw_skipped(frame, app);
+    }
+}
+
+fn draw_skipped(frame: &mut Frame, app: &App) {
+    let area = frame.area().inner(Margin::new(2, 1));
+    let lines: Vec<Line> = app
+        .skipped()
+        .iter()
+        .flat_map(|skipped| {
+            [
+                Line::from(skipped.path.display().to_string()),
+                Line::from(format!("  {}", skipped.defect)),
+            ]
+        })
+        .collect();
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("Skipped cards")
+                .title_bottom(" any key closes "),
+        ),
+        area,
+    );
 }
 
 fn skipped_count(count: usize) -> Option<String> {
     match count {
         0 => None,
-        1 => Some("1 card skipped ".into()),
-        n => Some(format!("{n} cards skipped ")),
+        1 => Some("1 card skipped (! list) ".into()),
+        n => Some(format!("{n} cards skipped (! list) ")),
     }
 }
 
