@@ -12,7 +12,7 @@ Or install from crates.io:
 cargo install kartei
 ```
 
-Until the first release, build from source:
+Or build the latest master from source:
 
 ```bash
 cargo install --git https://github.com/espadat-studio/kartei

@@ -5,11 +5,7 @@ description: "Keyboard-driven editor for contacts stored as vCard files in a loc
 
 > Read and edit your contacts from the terminal, one `.vcf` file at a time.
 
-:::caution
-kartei is pre-release. These pages describe the MVP being built; there is no release yet.
-:::
-
-kartei is a TUI for an address book kept as a vdir (a directory with one vCard file per contact) or as a single `.vcf` Bundle, such as Thunderbird writes. It lists, searches, views and edits contacts. It creates new ones too. Syncing is left to [vdirsyncer](https://github.com/pimutils/vdirsyncer).
+kartei is a TUI for an address book kept as a vdir (a directory with one vCard file per contact) or as a single `.vcf` Bundle, such as Thunderbird writes. It lists, searches, views, edits, creates and deletes contacts. Syncing is left to [vdirsyncer](https://github.com/pimutils/vdirsyncer).
 
 ## Key features
 

@@ -2,7 +2,7 @@
 
 Keyboard-driven editor for contacts stored as vCard files in a local vdir.
 
-kartei lists, searches, views, edits and creates contacts in a directory of `.vcf` files or in a single `.vcf` Bundle, such as Thunderbird writes. It never talks to a server; sync with [vdirsyncer](https://vdirsyncer.pimutils.org/).
+kartei lists, searches, views, edits, creates and deletes contacts in a directory of `.vcf` files or in a single `.vcf` Bundle, such as Thunderbird writes. It never talks to a server; sync with [vdirsyncer](https://vdirsyncer.pimutils.org/).
 
 Docs: <https://kartei.espadat.com>
 
@@ -16,7 +16,7 @@ Or install from crates.io:
 cargo install kartei
 ```
 
-Until the first release, build from source:
+Or build the latest master from source:
 
 ```bash
 cargo install --git https://github.com/espadat-studio/kartei
