@@ -38,12 +38,12 @@ fn details(card: &Card) -> Vec<Line<'static>> {
     lines.extend(
         card.phones()
             .into_iter()
-            .map(|phone| Line::from(format!("Phone  {phone}"))),
+            .map(|phone| Line::from(format!("Phone  {}", phone.value))),
     );
     lines.extend(
         card.emails()
             .into_iter()
-            .map(|email| Line::from(format!("Email  {email}"))),
+            .map(|email| Line::from(format!("Email  {}", email.value))),
     );
     lines
 }

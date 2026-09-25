@@ -1,6 +1,13 @@
+mod label;
 mod line;
 
 pub use line::ContentLine;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Labeled<T> {
+    pub label: Option<String>,
+    pub value: T,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
@@ -44,18 +51,43 @@ impl Card {
         )
     }
 
-    pub fn phones(&self) -> Vec<String> {
-        self.values("TEL").map(line::unescape).collect()
+    pub fn phones(&self) -> Vec<Labeled<String>> {
+        self.labeled("TEL", line::unescape)
     }
 
-    pub fn emails(&self) -> Vec<String> {
-        self.values("EMAIL").map(line::unescape).collect()
+    pub fn emails(&self) -> Vec<Labeled<String>> {
+        self.labeled("EMAIL", line::unescape)
+    }
+
+    fn labeled<T>(&self, name: &str, read: impl Fn(&str) -> T) -> Vec<Labeled<T>> {
+        self.properties(name)
+            .map(|l| Labeled {
+                label: self.label(l),
+                value: read(l.value()),
+            })
+            .collect()
+    }
+
+    fn label(&self, property: &ContentLine) -> Option<String> {
+        property
+            .group()
+            .and_then(|group| {
+                self.lines.iter().find(|l| {
+                    l.name().eq_ignore_ascii_case("X-ABLabel")
+                        && l.group().is_some_and(|g| g.eq_ignore_ascii_case(group))
+                })
+            })
+            .map(|l| label::decode(&line::unescape(l.value())))
+            .or_else(|| label::from_types(property.params()))
     }
 
     fn values(&self, name: &str) -> impl Iterator<Item = &str> {
+        self.properties(name).map(ContentLine::value)
+    }
+
+    fn properties(&self, name: &str) -> impl Iterator<Item = &ContentLine> {
         self.lines
             .iter()
             .filter(move |l| l.name().eq_ignore_ascii_case(name))
-            .map(ContentLine::value)
     }
 }

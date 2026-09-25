@@ -27,7 +27,7 @@ fn every_fixture_round_trips_byte_for_byte() {
 fn folded_photo_card_reads_its_fields() {
     let card = Card::parse(&fixture("folded-photo.vcf"));
     assert_eq!(card.display_name(), "Paula Photo");
-    assert_eq!(card.phones(), ["+49 170 1234567"]);
+    assert_eq!(card.phones()[0].value, "+49 170 1234567");
     let photo = card.lines().iter().find(|l| l.name() == "PHOTO").unwrap();
     assert!(photo.value().ends_with("AAAAAAAA/9k="));
     assert!(!photo.value().contains(' '));
@@ -38,8 +38,8 @@ fn lf_card_reads_its_fields() {
     let card = Card::parse(&fixture("lf-endings.vcf"));
     assert_eq!(card.display_name(), "Lena Linefeed");
     assert_eq!(card.structured_name(), ("Linefeed".into(), "Lena".into()));
-    assert_eq!(card.emails(), ["lena@example.org"]);
-    assert_eq!(card.phones(), ["tel:+33-1-23-45-67-89"]);
+    assert_eq!(card.emails()[0].value, "lena@example.org");
+    assert_eq!(card.phones()[0].value, "tel:+33-1-23-45-67-89");
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn escaped_name_components_are_split_and_unescaped() {
 #[test]
 fn property_names_match_case_insensitively() {
     let card = Card::parse(b"BEGIN:VCARD\r\nitem1.tel:123\r\nfn:x\r\nEND:VCARD\r\n");
-    assert_eq!(card.phones(), ["123"]);
+    assert_eq!(card.phones()[0].value, "123");
     assert_eq!(card.display_name(), "x");
 }
 
