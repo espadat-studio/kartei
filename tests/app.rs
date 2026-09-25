@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use kartei::app::App;
+use kartei::vdir::AddressBook;
 use kartei::{ui, vdir};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -60,6 +61,19 @@ fn list(screen: &[String]) -> String {
         .map(|row| row.chars().take(32).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn fixtures_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+}
+
+fn copy_fixtures(test: &str) -> PathBuf {
+    let dir = address_book(test, &[]);
+    for entry in fs::read_dir(fixtures_dir()).unwrap() {
+        let path = entry.unwrap().path();
+        fs::copy(&path, dir.join(path.file_name().unwrap())).unwrap();
+    }
+    dir
 }
 
 fn open_fixtures() -> App {
@@ -186,7 +200,7 @@ fn status_bar_shows_key_hints_and_q_quits() {
 
 #[test]
 fn empty_address_book_renders_without_selection() {
-    let mut app = App::new(Vec::new());
+    let mut app = App::new(AddressBook::default());
     press(&mut app, KeyCode::Char('j'));
     press(&mut app, KeyCode::Char('G'));
     assert!(app.selected_card().is_none());
@@ -267,4 +281,30 @@ fn details_show_organization_note_urls_and_address() {
 fn company_and_custom_display_name_cards_are_listed_under_display_name() {
     let list = list(&screen(&open_fixtures()));
     assert_shows(&list, &["ACME Plumbing", "Johnny D."]);
+}
+
+#[test]
+fn bad_cards_are_skipped_and_counted_in_the_status_bar() {
+    let dir = copy_fixtures("skipped-count");
+    let app = App::new(vdir::load(&dir).unwrap());
+    let screen = screen(&app);
+    assert_eq!(app.cards().len(), 9);
+    assert!(
+        screen.last().unwrap().contains("4 cards skipped"),
+        "{}",
+        screen.join("\n")
+    );
+    for name in ["No Begin", "No End", "First", "Second", "Bad"] {
+        assert!(!list(&screen).contains(name), "{name}");
+    }
+}
+
+#[test]
+fn status_bar_has_no_skipped_count_when_all_cards_load() {
+    assert!(
+        !screen(&open("none-skipped"))
+            .last()
+            .unwrap()
+            .contains("skipped")
+    );
 }

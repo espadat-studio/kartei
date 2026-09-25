@@ -28,6 +28,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let lines = app.selected_card().map(details).unwrap_or_default();
     frame.render_widget(Paragraph::new(lines).block(Block::bordered()), detail);
     frame.render_widget(Paragraph::new(HINTS), status);
+    if let Some(skipped) = skipped_count(app.skipped().len()) {
+        frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
+    }
+}
+
+fn skipped_count(count: usize) -> Option<String> {
+    match count {
+        0 => None,
+        1 => Some("1 card skipped ".into()),
+        n => Some(format!("{n} cards skipped ")),
+    }
 }
 
 fn details(card: &Card) -> Vec<Line<'static>> {

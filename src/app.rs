@@ -1,18 +1,22 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::card::Card;
+use crate::vdir::{AddressBook, Skipped};
 
 pub struct App {
     cards: Vec<Card>,
+    skipped: Vec<Skipped>,
     selected: usize,
     should_quit: bool,
 }
 
 impl App {
-    pub fn new(mut cards: Vec<Card>) -> Self {
+    pub fn new(book: AddressBook) -> Self {
+        let AddressBook { mut cards, skipped } = book;
         cards.sort_by_cached_key(sort_key);
         Self {
             cards,
+            skipped,
             selected: 0,
             should_quit: false,
         }
@@ -32,6 +36,10 @@ impl App {
 
     pub fn cards(&self) -> &[Card] {
         &self.cards
+    }
+
+    pub fn skipped(&self) -> &[Skipped] {
+        &self.skipped
     }
 
     pub fn selected(&self) -> usize {
