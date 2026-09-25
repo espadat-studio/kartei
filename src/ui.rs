@@ -31,19 +31,56 @@ pub fn draw(frame: &mut Frame, app: &App) {
 }
 
 fn details(card: &Card) -> Vec<Line<'static>> {
-    let mut lines = vec![
-        Line::styled(card.display_name(), Modifier::BOLD),
-        Line::default(),
-    ];
-    lines.extend(
-        card.phones()
+    let mut lines = vec![Line::styled(card.display_name(), Modifier::BOLD)];
+    if let Some(org) = card.organization() {
+        lines.extend(field("Company", None, &org.company));
+        lines.extend(field("Department", None, &org.department));
+    }
+    lines.push(Line::default());
+    for phone in card.phones() {
+        lines.extend(field("Phone", phone.label.as_deref(), &phone.value));
+    }
+    for email in card.emails() {
+        lines.extend(field("Email", email.label.as_deref(), &email.value));
+    }
+    for address in card.addresses() {
+        lines.push(Line::from(heading("Address", address.label.as_deref())));
+        let adr = address.value;
+        let place = [adr.postal_code, adr.city]
             .into_iter()
-            .map(|phone| Line::from(format!("Phone  {phone}"))),
-    );
-    lines.extend(
-        card.emails()
-            .into_iter()
-            .map(|email| Line::from(format!("Email  {email}"))),
-    );
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let parts = [adr.street, place, adr.region, adr.country];
+        let parts: Vec<_> = parts.into_iter().filter(|p| !p.is_empty()).collect();
+        lines.extend(indented(&parts.join("\n")));
+    }
+    if let Some(birthday) = card.birthday() {
+        lines.extend(field("Birthday", None, &birthday.to_string()));
+    }
+    for url in card.urls() {
+        lines.extend(field("URL", None, &url));
+    }
+    if let Some(note) = card.note() {
+        lines.push(Line::from("Note"));
+        lines.extend(indented(&note));
+    }
     lines
+}
+
+fn field(kind: &str, label: Option<&str>, value: &str) -> Option<Line<'static>> {
+    (!value.is_empty()).then(|| Line::from(format!("{}  {value}", heading(kind, label))))
+}
+
+fn heading(kind: &str, label: Option<&str>) -> String {
+    match label {
+        Some(label) => format!("{kind} ({label})"),
+        None => kind.to_owned(),
+    }
+}
+
+fn indented(text: &str) -> Vec<Line<'static>> {
+    text.lines()
+        .map(|line| Line::from(format!("  {line}")))
+        .collect()
 }

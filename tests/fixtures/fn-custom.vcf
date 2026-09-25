@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:fn-custom
+N:Doe;Jonathan;;;
+FN:Johnny D.
+BDAY:1985-07-04
+END:VCARD

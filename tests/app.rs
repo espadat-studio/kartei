@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use kartei::app::App;
 use kartei::{ui, vdir};
@@ -24,7 +24,7 @@ fn card(structured_name: &str, display_name: &str, tel: &str, email: &str) -> St
 }
 
 fn screen(app: &App) -> Vec<String> {
-    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     terminal.draw(|frame| ui::draw(frame, app)).unwrap();
     let buffer = terminal.backend().buffer();
     let width = buffer.area.width as usize;
@@ -52,6 +52,33 @@ fn detail(screen: &[String]) -> String {
         .map(|row| row.chars().skip(32).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn list(screen: &[String]) -> String {
+    screen
+        .iter()
+        .map(|row| row.chars().take(32).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn open_fixtures() -> App {
+    App::new(vdir::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")).unwrap())
+}
+
+fn select(app: &mut App, name: &str) {
+    press(app, KeyCode::Char('g'));
+    while app.selected_card().unwrap().display_name() != name {
+        let before = app.selected();
+        press(app, KeyCode::Char('j'));
+        assert_ne!(before, app.selected(), "{name:?} not in list");
+    }
+}
+
+fn assert_shows(text: &str, expected: &[&str]) {
+    for want in expected {
+        assert!(text.contains(want), "{want:?} missing from:\n{text}");
+    }
 }
 
 fn open(test: &str) -> App {
@@ -164,4 +191,80 @@ fn empty_address_book_renders_without_selection() {
     press(&mut app, KeyCode::Char('G'));
     assert!(app.selected_card().is_none());
     screen(&app);
+}
+
+#[test]
+fn details_show_decoded_labels() {
+    let mut app = open_fixtures();
+    select(&mut app, "Gabriela Garcia");
+    let detail = detail(&screen(&app));
+    assert_shows(
+        &detail,
+        &[
+            "Phone (Mobile)  +34 600 111 222",
+            "Phone (Gym)  +34 600 333 444",
+            "Phone (cell)  +34 600 555 666",
+            "Email (home)  gabi@example.org",
+            "Email (Work)  gabi@work.example",
+            "Address (home)",
+            "Calle Mayor 1",
+            "28013 Madrid",
+            "Spain",
+        ],
+    );
+    assert!(!detail.contains("_$!<"), "{detail}");
+}
+
+#[test]
+fn yearless_birthdays_show_without_1604() {
+    let mut app = open_fixtures();
+    for name in ["Omar Ortega", "Vera Vogel"] {
+        select(&mut app, name);
+        let detail = detail(&screen(&app));
+        assert_shows(&detail, &["Birthday  15 March"]);
+        assert!(!detail.contains("1604"), "{detail}");
+    }
+    select(&mut app, "Johnny D.");
+    assert_shows(&detail(&screen(&app)), &["Birthday  4 July 1985"]);
+}
+
+#[test]
+fn details_show_organization_note_urls_and_address() {
+    let mut app = open_fixtures();
+    select(&mut app, "ACME Plumbing");
+    assert_shows(
+        &detail(&screen(&app)),
+        &[
+            "Company  ACME Plumbing",
+            "Department  Emergency Repairs",
+            "URL  https://acme.example",
+            "URL  https://acme.example/emergency",
+            "Note",
+            "Open 24/7.",
+            "Ask for Bob, not Rob.",
+        ],
+    );
+
+    select(&mut app, "Max Meier");
+    let detail = detail(&screen(&app));
+    assert_shows(
+        &detail,
+        &[
+            "Address (work)",
+            "Hauptstr. 5, Hinterhaus",
+            "c/o Meier; 2. OG",
+            "10115 Berlin",
+            "Germany",
+        ],
+    );
+    assert!(
+        !detail.contains("PO Box") && !detail.contains("Building B"),
+        "{detail}"
+    );
+}
+
+#[test]
+fn company_and_custom_display_name_cards_are_listed_under_display_name() {
+    let list = list(&screen(&open_fixtures()));
+    assert_shows(&list, &["ACME Plumbing", "Johnny D."]);
 }

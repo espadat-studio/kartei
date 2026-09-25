@@ -1,0 +1,17 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iPhone OS 17.0//EN
+UID:apple-grouped-labels
+N:Garcia;Gabriela;;;
+FN:Gabriela Garcia
+item1.TEL;type=pref:+34 600 111 222
+item1.X-ABLabel:_$!<Mobile>!$_
+item2.TEL:+34 600 333 444
+item2.X-ABLabel:Gym
+TEL;type=CELL;type=VOICE:+34 600 555 666
+EMAIL;type=INTERNET;type=HOME;type=pref:gabi@example.org
+item3.EMAIL;type=INTERNET:gabi@work.example
+item3.X-ABLabel:_$!<Work>!$_
+item4.ADR;type=HOME:;;Calle Mayor 1;Madrid;;28013;Spain
+item4.X-ABADR:es
+END:VCARD

@@ -1,6 +1,50 @@
+mod bday;
+mod label;
 mod line;
 
+pub use bday::Birthday;
 pub use line::ContentLine;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Labeled<T> {
+    pub label: Option<String>,
+    pub value: T,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Address {
+    pub po_box: String,
+    pub extended: String,
+    pub street: String,
+    pub city: String,
+    pub region: String,
+    pub postal_code: String,
+    pub country: String,
+}
+
+impl Address {
+    fn parse(value: &str) -> Self {
+        let mut components = line::split_unescaped(value, ';')
+            .into_iter()
+            .map(line::unescape);
+        let mut next = || components.next().unwrap_or_default();
+        Self {
+            po_box: next(),
+            extended: next(),
+            street: next(),
+            city: next(),
+            region: next(),
+            postal_code: next(),
+            country: next(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Organization {
+    pub company: String,
+    pub department: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
@@ -44,18 +88,72 @@ impl Card {
         )
     }
 
-    pub fn phones(&self) -> Vec<String> {
-        self.values("TEL").map(line::unescape).collect()
+    pub fn phones(&self) -> Vec<Labeled<String>> {
+        self.labeled("TEL", line::unescape)
     }
 
-    pub fn emails(&self) -> Vec<String> {
-        self.values("EMAIL").map(line::unescape).collect()
+    pub fn emails(&self) -> Vec<Labeled<String>> {
+        self.labeled("EMAIL", line::unescape)
+    }
+
+    pub fn organization(&self) -> Option<Organization> {
+        let value = self.values("ORG").next()?;
+        let mut components = line::split_unescaped(value, ';')
+            .into_iter()
+            .map(line::unescape);
+        Some(Organization {
+            company: components.next().unwrap_or_default(),
+            department: components.next().unwrap_or_default(),
+        })
+    }
+
+    pub fn note(&self) -> Option<String> {
+        self.values("NOTE").next().map(line::unescape)
+    }
+
+    pub fn urls(&self) -> Vec<String> {
+        self.values("URL").map(line::unescape).collect()
+    }
+
+    pub fn addresses(&self) -> Vec<Labeled<Address>> {
+        self.labeled("ADR", Address::parse)
+    }
+
+    pub fn birthday(&self) -> Option<Birthday> {
+        self.properties("BDAY")
+            .next()
+            .map(|l| Birthday::parse(l.value(), l.params()))
+    }
+
+    fn labeled<T>(&self, name: &str, read: impl Fn(&str) -> T) -> Vec<Labeled<T>> {
+        self.properties(name)
+            .map(|l| Labeled {
+                label: self.label(l),
+                value: read(l.value()),
+            })
+            .collect()
+    }
+
+    fn label(&self, property: &ContentLine) -> Option<String> {
+        property
+            .group()
+            .and_then(|group| {
+                self.lines.iter().find(|l| {
+                    l.name().eq_ignore_ascii_case("X-ABLabel")
+                        && l.group().is_some_and(|g| g.eq_ignore_ascii_case(group))
+                })
+            })
+            .map(|l| label::decode(&line::unescape(l.value())))
+            .or_else(|| label::from_types(property.params()))
     }
 
     fn values(&self, name: &str) -> impl Iterator<Item = &str> {
+        self.properties(name).map(ContentLine::value)
+    }
+
+    fn properties(&self, name: &str) -> impl Iterator<Item = &ContentLine> {
         self.lines
             .iter()
             .filter(move |l| l.name().eq_ignore_ascii_case(name))
-            .map(ContentLine::value)
     }
 }
