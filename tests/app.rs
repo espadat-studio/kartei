@@ -1562,3 +1562,18 @@ fn adding_a_card_after_the_file_changed_on_disk_prompts() {
     press(&mut app, KeyCode::Char('r'));
     assert_eq!(listed(&app), ["Bob Brown", "Cy Cole", "Dora Diaz"]);
 }
+
+#[test]
+fn o_appends_the_new_card_to_the_file_as_loaded() {
+    let [cy, bob, dee] = bundle();
+    let original = [cy.as_str(), &bob, &dee].concat();
+    let (path, mut app) = open_file("file-new-overwrite", &original);
+    fs::write(&path, dee.replace("Dee", "Dora")).unwrap();
+    add_ann_lee(&mut app);
+    press(&mut app, KeyCode::Char('o'));
+
+    assert_eq!(app.mode(), Mode::Browse);
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.starts_with(&original), "{text}");
+    assert!(text[original.len()..].contains("FN:Ann Lee\r\n"), "{text}");
+}

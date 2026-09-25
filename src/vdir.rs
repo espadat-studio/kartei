@@ -85,8 +85,7 @@ pub fn eol(bytes: &[u8]) -> &'static str {
     }
 }
 
-pub fn append(chunks: Option<Vec<Vec<u8>>>, card: Vec<u8>) -> Vec<Vec<u8>> {
-    let mut chunks = chunks.unwrap_or_default();
+pub fn append(mut chunks: Vec<Vec<u8>>, card: Vec<u8>) -> Vec<Vec<u8>> {
     let eol = eol(&chunks.concat());
     if let Some(last) = chunks.last_mut()
         && !last.is_empty()
@@ -121,10 +120,7 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".tmp");
     let temp = PathBuf::from(temp);
-    let dir = match path.parent() {
-        Some(dir) if !dir.as_os_str().is_empty() => dir,
-        _ => Path::new("."),
-    };
+    let dir = path.parent().expect("card path is inside the address book");
     let result = write_synced(&temp, bytes, path)
         .and_then(|()| fs::rename(&temp, path))
         .and_then(|()| File::open(dir)?.sync_all());

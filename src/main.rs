@@ -14,7 +14,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let path = PathBuf::from(path);
-    let book = match vdir::load(&path) {
+    let book = match std::path::absolute(&path).and_then(|path| vdir::load(&path)) {
         Ok(book) => book,
         Err(err) => {
             eprintln!("kartei: {}: {err}", path.display());

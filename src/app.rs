@@ -231,7 +231,10 @@ impl App {
         let location = draft.location.clone();
         let (path, index) = &location;
         let chunks = match draft.is_new {
-            true => vdir::append(self.files.get(path).cloned(), edited.to_bytes()),
+            true => match self.files.get(path) {
+                Some(chunks) => vdir::append(chunks.clone(), edited.to_bytes()),
+                None => vec![edited.to_bytes()],
+            },
             false => {
                 let mut chunks = self.files[path].clone();
                 chunks[*index] = edited.to_bytes();
