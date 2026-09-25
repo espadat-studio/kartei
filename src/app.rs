@@ -8,6 +8,7 @@ pub enum Mode {
     Browse,
     Search,
     Prompt,
+    Help,
 }
 
 pub struct App {
@@ -39,7 +40,7 @@ impl App {
         match self.mode {
             Mode::Browse => self.browse(key),
             Mode::Search => self.search(key),
-            Mode::Prompt => self.mode = Mode::Browse,
+            Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
         }
     }
 
@@ -51,6 +52,7 @@ impl App {
             KeyCode::Char('g') => self.selected = 0,
             KeyCode::Char('G') => self.selected = last,
             KeyCode::Char('/') => self.mode = Mode::Search,
+            KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
             KeyCode::Char('q') => self.should_quit = true,
             _ => {}

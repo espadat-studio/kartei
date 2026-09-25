@@ -7,7 +7,32 @@ use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 use crate::app::{App, Mode};
 use crate::card::Card;
 
-const HINTS: &str = " j/k move  g/G top/bottom  / search  q quit";
+const HINTS: &str = " j/k move  g/G top/bottom  / search  ? help  q quit";
+
+const KEYMAP: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Browse",
+        &[
+            ("j/k Down/Up", "move"),
+            ("g/G", "top/bottom"),
+            ("/", "search"),
+            ("!", "list skipped cards"),
+            ("?", "show keys"),
+            ("q", "quit"),
+        ],
+    ),
+    (
+        "Search",
+        &[
+            ("type", "filter by name, company, email, phone"),
+            ("Backspace", "delete"),
+            ("Enter", "keep filter"),
+            ("Esc", "clear filter"),
+        ],
+    ),
+    ("Prompt", &[("any key", "close")]),
+    ("Help", &[("any key", "close")]),
+];
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let [main, status] =
@@ -39,15 +64,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if let Some(skipped) = skipped_count(app.skipped().len()) {
         frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
     }
-    if app.mode() == Mode::Prompt {
-        draw_skipped(frame, app);
+    match app.mode() {
+        Mode::Prompt => draw_overlay(frame, "Skipped cards", skipped(app)),
+        Mode::Help => draw_overlay(frame, "Keys", keymap()),
+        Mode::Browse | Mode::Search => {}
     }
 }
 
-fn draw_skipped(frame: &mut Frame, app: &App) {
-    let area = frame.area().inner(Margin::new(2, 1));
-    let lines: Vec<Line> = app
-        .skipped()
+fn skipped(app: &App) -> Vec<Line<'static>> {
+    app.skipped()
         .iter()
         .flat_map(|skipped| {
             [
@@ -55,12 +80,28 @@ fn draw_skipped(frame: &mut Frame, app: &App) {
                 Line::from(format!("  {}", skipped.defect)),
             ]
         })
-        .collect();
+        .collect()
+}
+
+fn keymap() -> Vec<Line<'static>> {
+    KEYMAP
+        .iter()
+        .flat_map(|(mode, keys)| {
+            let keys = keys
+                .iter()
+                .map(|(key, action)| Line::from(format!("  {key:<12} {action}")));
+            std::iter::once(Line::styled(*mode, Modifier::BOLD)).chain(keys)
+        })
+        .collect()
+}
+
+fn draw_overlay(frame: &mut Frame, title: &str, lines: Vec<Line>) {
+    let area = frame.area().inner(Margin::new(2, 1));
     frame.render_widget(Clear, area);
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .title("Skipped cards")
+                .title(title)
                 .title_bottom(" any key closes "),
         ),
         area,

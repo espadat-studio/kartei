@@ -496,3 +496,39 @@ fn search_matches_company_email_and_phone_digits() {
         press(&mut app, KeyCode::Esc);
     }
 }
+
+#[test]
+fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
+    let mut app = search_book("help");
+    assert!(screen(&app).last().unwrap().contains("? help"));
+    press(&mut app, KeyCode::Char('?'));
+    assert_eq!(app.mode(), Mode::Help);
+    let screen = screen(&app);
+    for mode in ["Browse", "Search", "Prompt", "Help"] {
+        row_of(&screen, mode);
+    }
+    for (key, action) in [
+        ("j/k", "move"),
+        ("g/G", "top/bottom"),
+        ("/", "search"),
+        ("!", "list skipped cards"),
+        ("?", "show keys"),
+        ("q", "quit"),
+        ("Backspace", "delete"),
+        ("Enter", "keep filter"),
+        ("Esc", "clear filter"),
+        ("any key", "close"),
+    ] {
+        let row = &screen[row_of(&screen, action)];
+        assert!(row.contains(key), "{key:?} not beside {action:?}: {row}");
+    }
+
+    press(&mut app, KeyCode::Char('q'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(!app.should_quit());
+    assert!(
+        !screen_of_width(&app, 80)
+            .join("\n")
+            .contains("clear filter")
+    );
+}
