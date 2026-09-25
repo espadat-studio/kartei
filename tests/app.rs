@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use kartei::app::App;
+use kartei::app::{App, Mode};
 use kartei::vdir::AddressBook;
 use kartei::{ui, vdir};
 use ratatui::Terminal;
@@ -378,4 +378,157 @@ fn skipped_files_are_never_written() {
         screen(&app);
     }
     assert_eq!(snapshot(&dir), before);
+}
+
+fn search_book(test: &str) -> App {
+    let dir = address_book(
+        test,
+        &[
+            (
+                "anna.vcf",
+                "BEGIN:VCARD\r\nN:Adams;Anna;;;\r\nFN:Anna Adams\r\nORG:Globex;Research\r\nEMAIL:anna@example.org\r\nTEL:+1 (555) 010-2030\r\nEND:VCARD\r\n",
+            ),
+            (
+                "bob.vcf",
+                "BEGIN:VCARD\r\nN:Brown;Bob;;;\r\nFN:Bob Brown\r\nORG:Initech\r\nEMAIL:bob@mail.test\r\nTEL:+49 170 1234567\r\nEND:VCARD\r\n",
+            ),
+            (
+                "cara.vcf",
+                "BEGIN:VCARD\r\nN:Chen;Cara;;;\r\nFN:Cara Chen\r\nEMAIL:cara@example.org\r\nTEL;VALUE=uri:tel:+33-1-23-45-67-89\r\nEND:VCARD\r\n",
+            ),
+        ],
+    );
+    App::new(vdir::load(&dir).unwrap())
+}
+
+fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        press(app, KeyCode::Char(c));
+    }
+}
+
+fn listed(app: &App) -> Vec<String> {
+    app.cards().iter().map(|card| card.display_name()).collect()
+}
+
+#[test]
+fn slash_filters_the_list_live_by_display_name() {
+    let mut app = search_book("search-name");
+    press(&mut app, KeyCode::Char('/'));
+    assert_eq!(app.mode(), Mode::Search);
+    type_text(&mut app, "n");
+    assert_eq!(listed(&app), ["Anna Adams", "Bob Brown", "Cara Chen"]);
+    type_text(&mut app, "A");
+    assert_eq!(listed(&app), ["Anna Adams"]);
+    let screen = screen(&app);
+    assert!(
+        screen.last().unwrap().contains("/nA"),
+        "{}",
+        screen.join("\n")
+    );
+    assert!(!list(&screen).contains("Cara Chen"));
+    assert!(detail(&screen).contains("Anna Adams"));
+}
+
+#[test]
+fn keys_typed_while_searching_are_part_of_the_query() {
+    let mut app = search_book("search-literal");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "qj?!/g");
+    assert!(!app.should_quit());
+    assert_eq!(app.mode(), Mode::Search);
+    assert!(listed(&app).is_empty());
+    assert!(screen(&app).last().unwrap().contains("/qj?!/g"));
+}
+
+#[test]
+fn enter_keeps_the_filter_and_esc_clears_it() {
+    let mut app = search_book("search-keep-clear");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "chen");
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(listed(&app), ["Cara Chen"]);
+    assert!(list(&screen(&app)).contains("Cards /chen"));
+    press(&mut app, KeyCode::Char('j'));
+    assert_eq!(app.selected_card().unwrap().display_name(), "Cara Chen");
+
+    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Backspace);
+    assert_eq!(app.query(), "che");
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(app.query(), "");
+    assert_eq!(listed(&app), ["Anna Adams", "Bob Brown", "Cara Chen"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Cara Chen");
+    assert!(!list(&screen(&app)).contains("Cards /"));
+}
+
+#[test]
+fn search_with_no_match_has_no_selection() {
+    let mut app = search_book("search-empty");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "zzz");
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('G'));
+    assert!(app.selected_card().is_none());
+    screen(&app);
+}
+
+#[test]
+fn search_matches_company_email_and_phone_digits() {
+    let mut app = search_book("search-fields");
+    for (query, expected) in [
+        ("INITECH", &["Bob Brown"][..]),
+        ("research", &["Anna Adams"]),
+        ("mail.test", &["Bob Brown"]),
+        ("example.org", &["Anna Adams", "Cara Chen"]),
+        ("5550102030", &["Anna Adams"]),
+        ("(555) 010-2030", &["Anna Adams"]),
+        ("+49 170", &["Bob Brown"]),
+        ("3312345", &["Cara Chen"]),
+        ("tel", &[]),
+        ("zzz", &[]),
+    ] {
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, query);
+        assert_eq!(listed(&app), expected, "{query:?}");
+        press(&mut app, KeyCode::Esc);
+    }
+}
+
+#[test]
+fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
+    let mut app = search_book("help");
+    assert!(screen(&app).last().unwrap().contains("? help"));
+    press(&mut app, KeyCode::Char('?'));
+    assert_eq!(app.mode(), Mode::Help);
+    let screen = screen(&app);
+    for mode in ["Browse", "Search", "Prompt", "Help"] {
+        row_of(&screen, mode);
+    }
+    for (key, action) in [
+        ("j/k", "move"),
+        ("g/G", "top/bottom"),
+        ("/", "search"),
+        ("!", "list skipped cards"),
+        ("?", "show keys"),
+        ("q", "quit"),
+        ("Backspace", "delete"),
+        ("Enter", "keep filter"),
+        ("Esc", "clear filter"),
+        ("any key", "close"),
+    ] {
+        let row = &screen[row_of(&screen, action)];
+        assert!(row.contains(key), "{key:?} not beside {action:?}: {row}");
+    }
+
+    press(&mut app, KeyCode::Char('q'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(!app.should_quit());
+    assert!(
+        !screen_of_width(&app, 80)
+            .join("\n")
+            .contains("clear filter")
+    );
 }
