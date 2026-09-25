@@ -70,7 +70,7 @@ In a changed bundle, `o` is refused, because the card may have moved: reload fir
 
 `E` opens the selected card's vCard text in `$VISUAL`, else `$EDITOR`, run through `sh` so arguments work. Inside a Bundle, only that card's text is opened. With neither variable set, the status bar shows an error. The text goes to a temp file readable only by you, deleted once the editor exits.
 
-Saving an empty buffer aborts. Saving unchanged text writes nothing. Otherwise the text must hold exactly one valid card, then it goes through the same conflict check as a save and is written exactly as your editor saved it. The line-preserving promise ([ADR-0001](https://github.com/espadat-studio/kartei/blob/master/meta/adr/0001-line-preserving-card-edits.md)) does not hold for raw edits.
+Saving an empty buffer aborts. Saving unchanged text writes nothing. Otherwise the text must hold exactly one valid card, then it goes through the same conflict check as a save and is written exactly as your editor saved it. Inside a Bundle, a missing final newline is added so the next card stays apart. The line-preserving promise ([ADR-0001](https://github.com/espadat-studio/kartei/blob/master/meta/adr/0001-line-preserving-card-edits.md)) does not hold for raw edits.
 
 If the text is not one valid card, kartei shows why and asks:
 
