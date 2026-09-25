@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9cd0906924f2d8cbdafb0f9f2e2908d4ea0127a98c7ba24ec2c1b805ac5a491e # shrinks to lines = [GeneratedLine { group: None, name: "A", params: [], value: "", folds: [0], continuation: ' ', eol: "\r\n" }]
