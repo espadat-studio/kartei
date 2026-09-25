@@ -177,7 +177,14 @@ fn skipped(app: &App) -> Vec<Line<'static>> {
         .iter()
         .flat_map(|skipped| {
             [
-                Line::from(skipped.path.display().to_string()),
+                Line::from(format!(
+                    "{}{}",
+                    skipped.path.display(),
+                    skipped
+                        .position
+                        .map(|n| format!(" #{n}"))
+                        .unwrap_or_default()
+                )),
                 Line::from(format!("  {}", skipped.defect)),
             ]
         })

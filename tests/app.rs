@@ -327,6 +327,8 @@ fn bang_lists_every_skipped_path_with_its_reason() {
         ("bad-invalid-utf8.vcf", "invalid UTF-8"),
     ] {
         let row = row_of(&screen, &dir.join(file).display().to_string());
+        let position = format!("{} #", dir.join(file).display());
+        assert!(!screen[row].contains(&position), "{}", screen.join("\n"));
         assert!(screen[row + 1].contains(reason), "{}", screen.join("\n"));
     }
 
@@ -1402,19 +1404,66 @@ fn shift_r_picks_up_cards_added_to_or_removed_from_a_bundle() {
 
 #[test]
 fn a_defective_card_in_a_bundle_is_skipped_alone_and_written_back_untouched() {
-    let [cy, _, dee] = bundle();
+    let [cy, bob, dee] = bundle();
+    let eve = card(
+        "Evans;Eve;;;",
+        "Eve Evans",
+        "+1 555 0105",
+        "eve@example.org",
+    );
+    let fay = card("Ford;Fay;;;", "Fay Ford", "+1 555 0106", "fay@example.org");
     let broken = "BEGIN:VCARD\r\nFN:Broken\r\n";
-    let (path, mut app) = open_bundle("bundle-defect", &[&cy, broken, &dee]);
-    assert_eq!(listed(&app), ["Anna Adams", "Cy Cole", "Dee Diaz"]);
-    assert_eq!(app.skipped().len(), 1);
+    let (path, mut app) = open_bundle("bundle-defect", &[&cy, &bob, &dee, broken, &eve, &fay]);
+    assert_eq!(
+        listed(&app),
+        [
+            "Anna Adams",
+            "Bob Brown",
+            "Cy Cole",
+            "Dee Diaz",
+            "Eve Evans",
+            "Fay Ford"
+        ]
+    );
+    assert!(screen(&app).last().unwrap().contains("1 card skipped"));
 
-    select(&mut app, "Dee Diaz");
+    press(&mut app, KeyCode::Char('!'));
+    let screen = screen_of_width(&app, 240);
+    let row = row_of(&screen, &format!("{} #4", path.display()));
+    assert!(
+        screen[row + 1].contains("no END:VCARD"),
+        "{}",
+        screen.join("\n")
+    );
+    press(&mut app, KeyCode::Esc);
+
+    select(&mut app, "Eve Evans");
     press(&mut app, KeyCode::Char('e'));
-    replace_given_name(&mut app, "Dee", "Dora");
+    replace_given_name(&mut app, "Eve", "Eva");
     save(&mut app);
     assert_eq!(
         fs::read_to_string(path).unwrap(),
-        [cy.as_str(), broken, &dee.replace("Dee", "Dora")].concat()
+        [&cy, &bob, &dee, broken, &eve.replace("Eve", "Eva"), &fay].concat()
+    );
+}
+
+#[test]
+fn an_invalid_utf8_card_in_a_bundle_is_skipped_alone() {
+    let [cy, _, dee] = bundle();
+    let dir = address_book("bundle-utf8", &[]);
+    let path = dir.join("bundle.vcf");
+    let broken: &[u8] = b"BEGIN:VCARD\r\nFN:\xff\r\nEND:VCARD\r\n";
+    fs::write(&path, [cy.as_bytes(), broken, dee.as_bytes()].concat()).unwrap();
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    assert_eq!(listed(&app), ["Cy Cole", "Dee Diaz"]);
+
+    press(&mut app, KeyCode::Char('!'));
+    let screen = screen_of_width(&app, 240);
+    let row = row_of(&screen, &format!("{} #2", path.display()));
+    assert!(
+        screen[row + 1].contains("invalid UTF-8"),
+        "{}",
+        screen.join("\n")
     );
 }
 
