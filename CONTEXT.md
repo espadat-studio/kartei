@@ -5,11 +5,15 @@ Keyboard-driven editor for contacts stored as vCard files in a local vdir.
 ## Language
 
 **Card**:
-One `.vcf` file in the vdir holding exactly one contact.
+One contact's vCard, from `BEGIN:VCARD` to `END:VCARD`, whichever file holds it.
 _Avoid_: entry, record, file
 
+**Bundle**:
+A `.vcf` file holding more than one Card, as Thunderbird exports write.
+_Avoid_: export, multi-card file
+
 **Address book**:
-The vdir directory kartei reads and writes; one Card per file.
+What kartei reads and writes: a directory of `.vcf` files, or a single `.vcf` file. Each file holds one Card or a Bundle.
 _Avoid_: collection, database
 
 **Content line**:
