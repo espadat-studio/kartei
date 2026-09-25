@@ -34,7 +34,7 @@ Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_
 
 In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing.
 
-Files that are not exactly one valid vCard are skipped at load. The status bar counts them; `!` lists each path and the reason.
+Files that are not exactly one valid vCard are skipped at load. The status bar counts them; `!` lists each file and the reason.
 
 ## Lossless edits
 
@@ -42,22 +42,22 @@ kartei rewrites only the lines an edit touches. Every other line is written back
 
 ## Keymap
 
-Keys are fixed. `?` shows them in the app.
+Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 
 ### Browse
 
-| Key                | Action               |
-| ------------------ | -------------------- |
-| `j` / `k` / arrows | Move down / up       |
-| `g` / `G`          | Jump to top / bottom |
-| `/`                | Search               |
-| `e` / `Enter`      | Edit focused contact |
-| `n`                | New contact          |
-| `y`                | Copy a value         |
-| `R`                | Reload all from disk |
-| `!`                | List skipped files   |
-| `?`                | Help                 |
-| `q`                | Quit                 |
+| Key                      | Action                      |
+| ------------------------ | --------------------------- |
+| `j` / `k`, `Down` / `Up` | Move down / up              |
+| `g` / `G`                | Jump to top / bottom        |
+| `/`                      | Search                      |
+| `e` / `Enter`            | Edit selected card          |
+| `n`                      | New card                    |
+| `y`                      | Copy a value (if any)       |
+| `R`                      | Reload all from disk        |
+| `!`                      | List skipped cards (if any) |
+| `?`                      | Help                        |
+| `q`                      | Quit                        |
 
 ### Search
 
@@ -105,7 +105,7 @@ Shown when a save finds the file changed or deleted on disk.
 
 ### Copy
 
-`y` lists the contact's phones, emails, addresses and URLs, numbered 1 to 9. The value is sent with OSC 52, so it works over SSH and in tmux (`set-clipboard on`).
+`y` lists the card's phones, emails, addresses and URLs, numbered 1 to 9. The value is sent with OSC 52, so it works over SSH and in tmux (`set-clipboard on`).
 
 | Key   | Action          |
 | ----- | --------------- |
