@@ -1,0 +1,8 @@
+BEGIN:VCARD
+VERSION:4.0
+UID:lf-endings
+N:Linefeed;Lena;;;
+FN:Lena Linefeed
+EMAIL;TYPE=home:lena@example.org
+TEL;VALUE=uri:tel:+33-1-23-45-67-89
+END:VCARD

@@ -1,0 +1,8 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:utf8-fold-midchar
+N:Müller-Lüdenscheidt;Jürgen;;;
+FN:Jürgen Müller-Lüdenscheidt aus Großbritannien und Österreich äöü �
+ �öü
+EMAIL:juergen@example.org
+END:VCARD
