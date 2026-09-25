@@ -6,6 +6,7 @@ use crate::card::{Card, Defect};
 
 #[derive(Debug, Default)]
 pub struct AddressBook {
+    pub dir: PathBuf,
     pub cards: Vec<(PathBuf, Card)>,
     pub skipped: Vec<Skipped>,
 }
@@ -16,8 +17,26 @@ pub struct Skipped {
     pub defect: Defect,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conflict {
+    Changed,
+    Deleted,
+}
+
+pub fn conflict(path: &Path, loaded: &[u8]) -> io::Result<Option<Conflict>> {
+    match fs::read(path) {
+        Ok(bytes) if bytes == loaded => Ok(None),
+        Ok(_) => Ok(Some(Conflict::Changed)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Some(Conflict::Deleted)),
+        Err(err) => Err(err),
+    }
+}
+
 pub fn load(dir: &Path) -> io::Result<AddressBook> {
-    let mut book = AddressBook::default();
+    let mut book = AddressBook {
+        dir: dir.to_owned(),
+        ..AddressBook::default()
+    };
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
         if path.extension().is_none_or(|ext| ext != "vcf") {
@@ -47,9 +66,12 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 fn write_synced(temp: &Path, bytes: &[u8], original: &Path) -> io::Result<()> {
-    let permissions = fs::metadata(original)?.permissions();
     let mut file = File::create(temp)?;
-    file.set_permissions(permissions)?;
+    match fs::metadata(original) {
+        Ok(metadata) => file.set_permissions(metadata.permissions())?,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    }
     file.write_all(bytes)?;
     file.sync_all()
 }

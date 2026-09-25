@@ -30,6 +30,26 @@ impl Birthday {
         read_date(value, omitted_year(params)).unwrap_or_else(|| Self::Invalid(value.to_owned()))
     }
 
+    pub fn from_iso(text: &str) -> Option<Self> {
+        read_date(text, None)
+    }
+
+    pub fn to_iso(&self) -> String {
+        match self {
+            Self::Date {
+                year: Some(year),
+                month,
+                day,
+            } => format!("{year:04}-{month:02}-{day:02}"),
+            Self::Date {
+                year: None,
+                month,
+                day,
+            } => format!("--{month:02}-{day:02}"),
+            Self::Invalid(raw) => raw.clone(),
+        }
+    }
+
     pub fn is_read_only(&self) -> bool {
         matches!(self, Self::Invalid(_))
     }
@@ -47,11 +67,62 @@ impl fmt::Display for Birthday {
     }
 }
 
+pub(crate) fn write(
+    year: Option<u16>,
+    month: u8,
+    day: u8,
+    existing: Option<(&[String], &str)>,
+    is_v4: bool,
+) -> (Vec<String>, String) {
+    let (params, value) = existing.unwrap_or((&[], ""));
+    let (date, time) = value.split_at(value.find('T').unwrap_or(value.len()));
+    let omit = params.iter().position(|p| is_omit_year(p));
+    let month_day = date
+        .strip_prefix("--")
+        .or(date.get(4..))
+        .unwrap_or_default();
+    let is_apple = omit.is_some() || (!is_v4 && !date.starts_with("--"));
+    let is_basic = match date {
+        "" => is_v4,
+        _ if year.is_none() && !is_apple && !date.starts_with("--") => true,
+        _ => !month_day.contains('-'),
+    };
+    let sep = if is_basic { "" } else { "-" };
+    let month_day = format!("{month:02}{sep}{day:02}");
+    let mut kept: Vec<String> = params
+        .iter()
+        .filter(|p| !is_omit_year(p))
+        .cloned()
+        .collect();
+    let date = match year {
+        Some(year) => format!("{year:04}{sep}{month_day}"),
+        None if is_apple => {
+            let param = omit.map_or_else(
+                || "X-APPLE-OMIT-YEAR=1604".to_owned(),
+                |i| params[i].clone(),
+            );
+            let omitted = omitted_year(std::slice::from_ref(&param))
+                .unwrap_or("1604")
+                .to_owned();
+            kept.insert(omit.unwrap_or(0), param);
+            format!("{omitted}{sep}{month_day}")
+        }
+        None => format!("--{month_day}"),
+    };
+    (kept, date + time)
+}
+
+fn is_omit_year(param: &str) -> bool {
+    param
+        .split_once('=')
+        .is_some_and(|(name, _)| name.eq_ignore_ascii_case("X-APPLE-OMIT-YEAR"))
+}
+
 fn omitted_year(params: &[String]) -> Option<&str> {
     params
         .iter()
-        .filter_map(|param| param.split_once('='))
-        .find(|(name, _)| name.eq_ignore_ascii_case("X-APPLE-OMIT-YEAR"))
+        .find(|param| is_omit_year(param))
+        .and_then(|param| param.split_once('='))
         .map(|(_, year)| year)
 }
 

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{self, Address, Birthday, Card, Defect, Field, Labeled, Organization};
+use kartei::card::{self, Address, Birthday, Card, Defect, Field, Kind, Labeled, Organization};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -278,4 +278,121 @@ fn display_name_derives_from_name_parts_in_reading_order() {
         card::derived_display_name(|field| parts(field).to_owned()),
         "Dr. Jane Doe PhD"
     );
+}
+
+#[test]
+fn relabeling_a_value_replaces_its_label_types_and_keeps_the_others() {
+    let mut card =
+        Card::parse(b"BEGIN:VCARD\r\nTEL;type=CELL;type=VOICE:1\r\nEND:VCARD\r\n").unwrap();
+    card.update(Kind::Phone, 0, &["1".into()], Some("other"));
+    assert_eq!(
+        card.to_bytes(),
+        b"BEGIN:VCARD\r\nTEL;type=VOICE;TYPE=OTHER:1\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn relabeling_a_grouped_value_drops_its_apple_label_and_keeps_the_group() {
+    let mut card = Card::parse(
+        b"BEGIN:VCARD\r\nitem1.TEL;type=pref:1\r\nitem1.X-ABLabel:Gym\r\nEND:VCARD\r\n",
+    )
+    .unwrap();
+    card.update(Kind::Phone, 0, &["1".into()], Some("work"));
+    assert_eq!(
+        card.to_bytes(),
+        b"BEGIN:VCARD\r\nitem1.TEL;type=pref;TYPE=WORK:1\r\nEND:VCARD\r\n"
+    );
+    assert_eq!(card.phones()[0].label.as_deref(), Some("work"));
+}
+
+#[test]
+fn labels_cycle_through_home_work_cell_other() {
+    assert_eq!(card::next_label(None), "home");
+    assert_eq!(card::next_label(Some("Gym")), "home");
+    assert_eq!(card::next_label(Some("home")), "work");
+    assert_eq!(card::next_label(Some("cell")), "other");
+    assert_eq!(card::next_label(Some("other")), "home");
+}
+
+#[test]
+fn birthdays_are_written_in_the_cards_existing_form() {
+    let date = |year, month, day| Birthday::Date { year, month, day };
+    for (bday, birthday, expected) in [
+        ("", date(Some(1985), 7, 4), "BDAY:1985-07-04"),
+        ("VERSION:4.0", date(Some(1985), 7, 4), "BDAY:19850704"),
+        ("VERSION:4.0", date(None, 3, 15), "BDAY:--0315"),
+        (
+            "",
+            date(None, 3, 15),
+            "BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-15",
+        ),
+        ("BDAY:19850704", date(Some(1990), 1, 2), "BDAY:19900102"),
+        (
+            "BDAY:1985-07-04T00:00:00Z",
+            date(Some(1985), 7, 5),
+            "BDAY:1985-07-05T00:00:00Z",
+        ),
+        ("BDAY:--03-15", date(None, 4, 1), "BDAY:--04-01"),
+        (
+            "VERSION:4.0\r\nBDAY:1990-05-01",
+            date(None, 5, 1),
+            "BDAY:--0501",
+        ),
+        (
+            "BDAY:1985-07-04",
+            date(None, 7, 4),
+            "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-04",
+        ),
+        (
+            "BDAY;x-apple-omit-year=1900:1900-03-15",
+            date(None, 4, 1),
+            "BDAY;x-apple-omit-year=1900:1900-04-01",
+        ),
+    ] {
+        let mut card =
+            Card::parse(format!("BEGIN:VCARD\r\n{bday}\r\nEND:VCARD\r\n").as_bytes()).unwrap();
+        card.set_birthday(Some(&birthday));
+        let bytes = String::from_utf8(card.to_bytes()).unwrap();
+        assert!(
+            bytes.contains(&format!("{expected}\r\n")),
+            "{bday:?}: {bytes}"
+        );
+        assert_eq!(card.birthday(), Some(birthday), "{bday:?}");
+    }
+}
+
+#[test]
+fn clearing_a_birthday_removes_its_line() {
+    let mut card = fixture("apple-omit-year.vcf");
+    card.set_birthday(None);
+    assert!(!card.lines().iter().any(|l| l.name() == "BDAY"));
+}
+
+#[test]
+fn a_new_card_round_trips_and_parses_back_to_the_entered_fields() {
+    let mut card = Card::new("c0ffee");
+    card.set(Field::Given, "Ann");
+    card.set(Field::Family, "Lee");
+    card.set(Field::DisplayName, "Ann Lee");
+    card.add(Kind::Phone, &["+1 555".into()], Some("cell"));
+    card.set(Field::Note, "hi, there");
+    let bytes = card.to_bytes();
+    assert_eq!(
+        String::from_utf8(bytes.clone()).unwrap(),
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:c0ffee\r\nN:Lee;Ann;;;\r\nFN:Ann Lee\r\nTEL;TYPE=CELL:+1 555\r\nNOTE:hi\\, there\r\nEND:VCARD\r\n"
+    );
+    let parsed = Card::parse(&bytes).unwrap();
+    assert_eq!(parsed.to_bytes(), bytes);
+    assert_eq!(parsed.structured_name(), ("Lee".into(), "Ann".into()));
+    assert_eq!(labeled(&parsed.phones()), [(Some("cell"), "+1 555")]);
+    assert_eq!(parsed.note().as_deref(), Some("hi, there"));
+}
+
+#[test]
+fn display_name_falls_back_to_the_company_without_a_structured_name() {
+    let parts = |field| match field {
+        Field::Company => "ACME".to_owned(),
+        _ => String::new(),
+    };
+    assert_eq!(card::derived_display_name(parts), "ACME");
 }

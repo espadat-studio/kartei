@@ -5,12 +5,14 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 
 use crate::app::{App, Mode};
-use crate::card::{Card, Field};
-use crate::form::{FIELDS, Form};
+use crate::card::Card;
+use crate::form::Form;
+use crate::vdir::Conflict;
 
-const HINTS: &str = " j/k move  / search  e edit  ? help  q quit";
-const EDIT_HINTS: &str = " Tab/S-Tab move  Ctrl-s save  Esc cancel";
+const HINTS: &str = " / search  e edit  n new  y copy  ? help  q quit";
+const EDIT_HINTS: &str = " Ctrl-s save  Esc cancel  Tab move  Alt-a/d add/remove  Alt-l label";
 const LABEL_WIDTH: u16 = 13;
+const ANY_KEY: &str = " any key closes ";
 
 const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
@@ -20,6 +22,9 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
             ("g/G", "top/bottom"),
             ("/", "search"),
             ("e/Enter", "edit card"),
+            ("n", "new card"),
+            ("y", "copy a value"),
+            ("R", "reload from disk"),
             ("!", "list skipped cards"),
             ("?", "show keys"),
             ("q", "quit"),
@@ -28,7 +33,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Search",
         &[
-            ("type", "filter by name, company, email, phone"),
+            ("type", "filter cards"),
             ("Backspace", "delete"),
             ("Enter", "keep filter"),
             ("Esc", "clear filter"),
@@ -37,11 +42,23 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Edit",
         &[
-            ("Tab/S-Tab Up/Down", "next/previous field"),
+            ("Tab/Down", "next field"),
+            ("S-Tab/Up", "previous field"),
+            ("Alt-a/Alt-d", "add/remove value"),
+            ("Alt-l", "cycle label"),
             ("Ctrl-s", "save"),
             ("Esc", "cancel"),
         ],
     ),
+    (
+        "Conflict",
+        &[
+            ("r", "reload, drop edit"),
+            ("o", "overwrite/recreate"),
+            ("Esc", "keep editing"),
+        ],
+    ),
+    ("Copy", &[("1-9", "copy value"), ("Esc", "cancel")]),
     ("Prompt, Help", &[("any key", "close")]),
 ];
 
@@ -74,40 +91,50 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
     let hints = match app.mode() {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
+        Mode::Copy => " 1-9 copy  Esc close".to_owned(),
         Mode::Edit => EDIT_HINTS.to_owned(),
         Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
+        Mode::Conflict(Conflict::Changed) => {
+            " Card changed on disk: r reload  o overwrite  Esc keep editing".to_owned()
+        }
+        Mode::Conflict(Conflict::Deleted) => {
+            " Card deleted on disk: r reload  o recreate  Esc keep editing".to_owned()
+        }
         _ => HINTS.to_owned(),
     };
-    let hints = match app.error() {
-        Some(error) => Paragraph::new(format!(" {error}")).style(Color::Red),
-        None => Paragraph::new(hints),
+    let hints = match (app.error(), app.status()) {
+        (Some(error), _) => Paragraph::new(format!(" {error}")).style(Color::Red),
+        (None, Some(status)) => Paragraph::new(format!(" {status}")),
+        (None, None) => Paragraph::new(hints),
     };
-    frame.render_widget(hints, status);
-    if let Some(skipped) = skipped_count(app.skipped().len()) {
-        frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
-    }
+    let count = skipped_count(app.skipped().len()).unwrap_or_default();
+    let [hints_area, count_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(count.len() as u16)])
+            .areas(status);
+    frame.render_widget(hints, hints_area);
+    frame.render_widget(Paragraph::new(count), count_area);
     match app.mode() {
-        Mode::Prompt => draw_overlay(frame, "Skipped cards", skipped(app)),
-        Mode::Help => draw_overlay(frame, "Keys", keymap()),
-        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard => {}
+        Mode::Prompt => draw_overlay(frame, "Skipped cards", ANY_KEY, vec![skipped(app)]),
+        Mode::Help => draw_overlay(frame, "Keys", ANY_KEY, keymap()),
+        Mode::Copy => draw_overlay(frame, "Copy", " 1-9 copy  Esc close ", vec![copyable(app)]),
+        Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard | Mode::Conflict(_) => {}
     }
 }
 
 fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     let mut lines = Vec::new();
     let mut cursor = None;
-    for (i, ((field, label), input)) in FIELDS.iter().zip(form.inputs()).enumerate() {
+    for (i, row) in form.rows().into_iter().enumerate() {
         let style = match i == form.focus() {
             true => Style::new().add_modifier(Modifier::BOLD),
             false => Style::new(),
         };
         if i == form.focus() {
-            let (row, col) = input.cursor();
-            let y = area.y + 1 + lines.len() as u16 + row;
-            cursor = Some(Position::new(area.x + 1 + LABEL_WIDTH + col, y));
+            let (y, x) = row.input.cursor();
+            cursor = Some((lines.len() as u16 + y, LABEL_WIDTH + x));
         }
-        for (row, text) in input.text().split('\n').enumerate() {
-            let label = if row == 0 { label } else { "" };
+        for (n, text) in row.input.text().split('\n').enumerate() {
+            let label = if n == 0 { row.label } else { "" };
             let mut line = Line::from(vec![
                 Span::styled(
                     format!("{label:<width$}", width = LABEL_WIDTH.into()),
@@ -115,24 +142,34 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 ),
                 Span::raw(text.to_owned()),
             ]);
-            if *field == Field::DisplayName {
-                let link = if form.is_linked() {
-                    "  (linked)"
-                } else {
-                    "  (custom)"
-                };
-                line.push_span(Span::styled(link, Modifier::DIM));
+            if let Some(suffix) = row.suffix.as_ref().filter(|_| n == 0) {
+                line.push_span(Span::styled(format!("  {suffix}"), Modifier::DIM));
             }
             lines.push(line);
         }
     }
+    let height = area.height.saturating_sub(2);
+    let scroll = cursor.map_or(0, |(y, _)| (y + 1).saturating_sub(height));
     frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Edit")),
+        Paragraph::new(lines)
+            .scroll((scroll, 0))
+            .block(Block::bordered().title("Edit")),
         area,
     );
-    if let Some(cursor) = cursor {
-        frame.set_cursor_position(cursor);
+    if let Some((y, x)) = cursor {
+        frame.set_cursor_position(Position::new(area.x + 1 + x, area.y + 1 + y - scroll));
     }
+}
+
+fn copyable(app: &App) -> Vec<Line<'static>> {
+    app.copyable()
+        .into_iter()
+        .zip(1..)
+        .map(|((kind, label, value), n)| {
+            let value = value.replace('\n', ", ");
+            Line::from(format!("{n}  {}  {value}", heading(kind, label.as_deref())))
+        })
+        .collect()
 }
 
 fn skipped(app: &App) -> Vec<Line<'static>> {
@@ -147,29 +184,33 @@ fn skipped(app: &App) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn keymap() -> Vec<Line<'static>> {
-    KEYMAP
-        .iter()
-        .flat_map(|(mode, keys)| {
-            let keys = keys
+fn keymap() -> Vec<Vec<Line<'static>>> {
+    let (left, right) = KEYMAP.split_at(2);
+    [left, right]
+        .map(|modes| {
+            modes
                 .iter()
-                .map(|(key, action)| Line::from(format!("  {key:<12} {action}")));
-            std::iter::once(Line::styled(*mode, Modifier::BOLD)).chain(keys)
+                .flat_map(|(mode, keys)| {
+                    let keys = keys
+                        .iter()
+                        .map(|(key, action)| Line::from(format!("  {key:<12} {action}")));
+                    std::iter::once(Line::styled(*mode, Modifier::BOLD)).chain(keys)
+                })
+                .collect()
         })
-        .collect()
+        .into()
 }
 
-fn draw_overlay(frame: &mut Frame, title: &str, lines: Vec<Line>) {
+fn draw_overlay(frame: &mut Frame, title: &str, footer: &str, columns: Vec<Vec<Line>>) {
     let area = frame.area().inner(Margin::new(2, 1));
+    let block = Block::bordered().title(title).title_bottom(footer);
     frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .title(title)
-                .title_bottom(" any key closes "),
-        ),
-        area,
-    );
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let areas = Layout::horizontal(vec![Constraint::Fill(1); columns.len()]).split(inner);
+    for (lines, column) in columns.into_iter().zip(areas.iter()) {
+        frame.render_widget(Paragraph::new(lines), *column);
+    }
 }
 
 fn skipped_count(count: usize) -> Option<String> {
@@ -195,15 +236,7 @@ fn details(card: &Card) -> Vec<Line<'static>> {
     }
     for address in card.addresses() {
         lines.push(Line::from(heading("Address", address.label.as_deref())));
-        let adr = address.value;
-        let place = [adr.postal_code, adr.city]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let parts = [adr.street, place, adr.region, adr.country];
-        let parts: Vec<_> = parts.into_iter().filter(|p| !p.is_empty()).collect();
-        lines.extend(indented(&parts.join("\n")));
+        lines.extend(indented(&address.value.to_string()));
     }
     if let Some(birthday) = card.birthday() {
         lines.extend(field("Birthday", None, &birthday.to_string()));
