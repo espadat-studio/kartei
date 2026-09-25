@@ -2,6 +2,8 @@ mod bday;
 mod label;
 mod line;
 
+use std::fmt;
+
 pub use bday::Birthday;
 pub use line::ContentLine;
 
@@ -46,16 +48,44 @@ pub struct Organization {
     pub department: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Defect {
+    NoBegin,
+    NoEnd,
+    MultipleCards,
+    InvalidUtf8,
+}
+
+impl fmt::Display for Defect {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::NoBegin => "no BEGIN:VCARD",
+            Self::NoEnd => "no END:VCARD",
+            Self::MultipleCards => "more than one VCARD",
+            Self::InvalidUtf8 => "invalid UTF-8",
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
     lines: Vec<ContentLine>,
 }
 
 impl Card {
-    pub fn parse(bytes: &[u8]) -> Self {
-        Self {
-            lines: line::split(bytes),
+    pub fn parse(bytes: &[u8]) -> Result<Self, Defect> {
+        let lines = line::split(bytes).ok_or(Defect::InvalidUtf8)?;
+        let mut content = lines.iter().filter(|l| !l.is_blank());
+        if !content.next().is_some_and(|l| l.is("BEGIN", "VCARD")) {
+            return Err(Defect::NoBegin);
         }
+        if lines.iter().filter(|l| l.is("BEGIN", "VCARD")).count() > 1 {
+            return Err(Defect::MultipleCards);
+        }
+        if !content.next_back().is_some_and(|l| l.is("END", "VCARD")) {
+            return Err(Defect::NoEnd);
+        }
+        Ok(Self { lines })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

@@ -8,20 +8,20 @@ pub struct ContentLine {
 }
 
 impl ContentLine {
-    fn from_raw(raw: Vec<u8>) -> Self {
-        let text = String::from_utf8_lossy(&unfold(&raw)).into_owned();
+    fn from_raw(raw: Vec<u8>) -> Option<Self> {
+        let text = String::from_utf8(unfold(&raw)).ok()?;
         let (head, params, value) = split_head(&text);
         let (group, name) = match head.split_once('.') {
             Some((group, name)) => (Some(group.to_owned()), name.to_owned()),
             None => (None, head.to_owned()),
         };
-        Self {
+        Some(Self {
             group,
             name,
             params: params.into_iter().map(str::to_owned).collect(),
             value: value.to_owned(),
             raw,
-        }
+        })
     }
 
     pub fn raw(&self) -> &[u8] {
@@ -43,9 +43,20 @@ impl ContentLine {
     pub fn value(&self) -> &str {
         &self.value
     }
+
+    pub(crate) fn is(&self, name: &str, value: &str) -> bool {
+        self.group.is_none()
+            && self.params.is_empty()
+            && self.name.eq_ignore_ascii_case(name)
+            && self.value.eq_ignore_ascii_case(value)
+    }
+
+    pub(crate) fn is_blank(&self) -> bool {
+        self.raw.trim_ascii().is_empty()
+    }
 }
 
-pub(crate) fn split(bytes: &[u8]) -> Vec<ContentLine> {
+pub(crate) fn split(bytes: &[u8]) -> Option<Vec<ContentLine>> {
     let mut lines: Vec<Vec<u8>> = Vec::new();
     for physical in bytes.split_inclusive(|&b| b == b'\n') {
         match lines.last_mut() {
