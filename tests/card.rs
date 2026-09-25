@@ -369,7 +369,7 @@ fn clearing_a_birthday_removes_its_line() {
 
 #[test]
 fn a_new_card_round_trips_and_parses_back_to_the_entered_fields() {
-    let mut card = Card::new("c0ffee");
+    let mut card = Card::new("c0ffee", "\r\n");
     card.set(Field::Given, "Ann");
     card.set(Field::Family, "Lee");
     card.set(Field::DisplayName, "Ann Lee");

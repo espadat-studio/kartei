@@ -30,7 +30,9 @@ Point kartei at the directory vdirsyncer syncs into:
 kartei ~/.local/share/contacts
 ```
 
-Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. A missing or unreadable directory prints the error and exits with status 1.
+Or pass a single `.vcf` file, such as a Thunderbird export: `kartei Contacts.vcf`. New Cards go after the file's last Card, with its line endings. In a directory, each new Card gets its own `<uid>.vcf`.
+
+Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1.
 
 In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing.
 

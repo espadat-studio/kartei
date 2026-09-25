@@ -200,9 +200,10 @@ pub struct Card {
 }
 
 impl Card {
-    pub fn new(uid: &str) -> Self {
-        let bytes =
-            format!("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:;;;;\r\nFN:\r\nEND:VCARD\r\n");
+    pub fn new(uid: &str, eol: &str) -> Self {
+        let bytes = format!(
+            "BEGIN:VCARD{eol}VERSION:3.0{eol}UID:{uid}{eol}N:;;;;{eol}FN:{eol}END:VCARD{eol}"
+        );
         Self::parse(bytes.as_bytes()).expect("template is a valid card")
     }
 

@@ -9,15 +9,15 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
 fn main() -> ExitCode {
-    let Some(dir) = env::args_os().nth(1).or_else(|| env::var_os("KARTEI_DIR")) else {
-        eprintln!("usage: kartei <address-book-dir> (or set KARTEI_DIR)");
+    let Some(path) = env::args_os().nth(1).or_else(|| env::var_os("KARTEI_DIR")) else {
+        eprintln!("usage: kartei <address-book-dir-or-vcf-file> (or set KARTEI_DIR)");
         return ExitCode::FAILURE;
     };
-    let dir = PathBuf::from(dir);
-    let book = match vdir::load(&dir) {
+    let path = PathBuf::from(path);
+    let book = match std::path::absolute(&path).and_then(|path| vdir::load(&path)) {
         Ok(book) => book,
         Err(err) => {
-            eprintln!("kartei: {}: {err}", dir.display());
+            eprintln!("kartei: {}: {err}", path.display());
             return ExitCode::FAILURE;
         }
     };
