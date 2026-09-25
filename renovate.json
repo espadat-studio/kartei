@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "group:allNonMajor",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "semanticCommits": "enabled",
+  "packageRules": [
+    {
+      "description": "Cargo dependencies are linked into the released binary, so a bump only reaches users through a release — build is in release_commits. Needed because :semanticPrefixFixDepsChoreOthers types lockfile-only updates as chore, and a patch-level security fix arrives lockfile-only — sibling repo colporteur stranded an ammonia XSS fix on master this way. Tooling, dev-dependencies and actions never reach the artifact and stay chore.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDepTypes": [
+        "dependencies"
+      ],
+      "semanticCommitType": "build",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "The docs site is a build directory, not part of the crate. config:recommended types npm `dependencies` updates as fix, and release-plz releases on ^(feat|fix|build) — so a Starlight bump would publish a crates.io version with no code change. Docs dependencies never reach the binary and stay chore.",
+      "matchManagers": [
+        "npm"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "The hk binary (mise.toml, native mise manager) and its pkl schema (hk.pkl, the customManager below) are one version in two files. Grouped so a bump cannot land half-applied, which is what left hooks broken when hk 2.0.0 met a 1.x schema.",
+      "matchDepNames": [
+        "hk",
+        "jdx/hk"
+      ],
+      "groupName": "hk"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "hk's pkl schema is pinned by URL inside hk.pkl and no manager parses it. It has to move with the hk binary in mise.toml: hk 2.0.0 cannot evaluate a 1.x schema, and every hook dies with \"listing index amendment requires an Int index\". The amends/import keyword stays inside the match so each replaceString occurs once in the file; autoReplaceGlobalMatch then fixes both versions on the line.",
+      "managerFilePatterns": [
+        "/^hk\\.pkl$/"
+      ],
+      "matchStrings": [
+        "(?:amends|import) \"package://github\\.com/jdx/hk/releases/download/v(?<currentValue>[0-9.]+)/hk@[0-9.]+#"
+      ],
+      "depNameTemplate": "jdx/hk",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ]
+}
