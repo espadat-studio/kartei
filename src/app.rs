@@ -75,14 +75,8 @@ impl App {
 
     fn filter(&mut self) {
         let current = self.visible.get(self.selected).copied();
-        let needle = self.query.to_lowercase();
         self.visible = (0..self.cards.len())
-            .filter(|&i| {
-                self.cards[i]
-                    .display_name()
-                    .to_lowercase()
-                    .contains(&needle)
-            })
+            .filter(|&i| is_match(&self.cards[i], &self.query))
             .collect();
         self.selected = current
             .and_then(|card| self.visible.iter().position(|&i| i == card))
@@ -116,6 +110,31 @@ impl App {
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }
+}
+
+fn is_match(card: &Card, query: &str) -> bool {
+    let needle = query.to_lowercase();
+    let org = card.organization().into_iter();
+    let emails = card.emails().into_iter().map(|email| email.value);
+    let texts = std::iter::once(card.display_name())
+        .chain(org.flat_map(|org| [org.company, org.department]))
+        .chain(emails);
+    if texts
+        .into_iter()
+        .any(|text| text.to_lowercase().contains(&needle))
+    {
+        return true;
+    }
+    let digits: String = query
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '+' | '-' | '(' | ')'))
+        .collect();
+    !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && card.phones().iter().any(|phone| {
+            let phone: String = phone.value.chars().filter(char::is_ascii_digit).collect();
+            phone.contains(&digits)
+        })
 }
 
 fn sort_key(card: &Card) -> (String, String, String) {

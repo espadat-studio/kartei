@@ -416,13 +416,13 @@ fn slash_filters_the_list_live_by_display_name() {
     let mut app = search_book("search-name");
     press(&mut app, KeyCode::Char('/'));
     assert_eq!(app.mode(), Mode::Search);
-    type_text(&mut app, "a");
-    assert_eq!(listed(&app), ["Anna Adams", "Cara Chen"]);
-    type_text(&mut app, "DA");
+    type_text(&mut app, "n");
+    assert_eq!(listed(&app), ["Anna Adams", "Bob Brown", "Cara Chen"]);
+    type_text(&mut app, "A");
     assert_eq!(listed(&app), ["Anna Adams"]);
     let screen = screen(&app);
     assert!(
-        screen.last().unwrap().contains("/aDA"),
+        screen.last().unwrap().contains("/nA"),
         "{}",
         screen.join("\n")
     );
@@ -473,4 +473,26 @@ fn search_with_no_match_has_no_selection() {
     press(&mut app, KeyCode::Char('G'));
     assert!(app.selected_card().is_none());
     screen(&app);
+}
+
+#[test]
+fn search_matches_company_email_and_phone_digits() {
+    let mut app = search_book("search-fields");
+    for (query, expected) in [
+        ("INITECH", &["Bob Brown"][..]),
+        ("research", &["Anna Adams"]),
+        ("mail.test", &["Bob Brown"]),
+        ("example.org", &["Anna Adams", "Cara Chen"]),
+        ("5550102030", &["Anna Adams"]),
+        ("(555) 010-2030", &["Anna Adams"]),
+        ("+49 170", &["Bob Brown"]),
+        ("3312345", &["Cara Chen"]),
+        ("tel", &[]),
+        ("zzz", &[]),
+    ] {
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, query);
+        assert_eq!(listed(&app), expected, "{query:?}");
+        press(&mut app, KeyCode::Esc);
+    }
 }
