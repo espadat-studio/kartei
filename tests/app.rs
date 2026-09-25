@@ -1456,3 +1456,109 @@ fn o_recreates_a_deleted_bundle_with_the_edit_and_the_other_cards_as_loaded() {
         [cy, bob.replace("Bob", "Rob"), dee].concat()
     );
 }
+
+fn open_file(test: &str, body: &str) -> (PathBuf, App) {
+    let dir = address_book(test, &[("Contacts.vcf", body), ("anna.vcf", ANNA)]);
+    let path = dir.join("Contacts.vcf");
+    let app = App::new(vdir::load(&path).unwrap());
+    (path, app)
+}
+
+fn add_ann_lee(app: &mut App) {
+    press(app, KeyCode::Char('n'));
+    focus(app, "Given name");
+    type_text(app, "Ann");
+    focus(app, "Family name");
+    type_text(app, "Lee");
+    save(app);
+}
+
+fn uid_of(text: &str) -> &str {
+    text.lines()
+        .find_map(|l| l.strip_prefix("UID:"))
+        .unwrap()
+        .trim_end()
+}
+
+#[test]
+fn a_bundle_given_as_the_path_lists_its_cards_only() {
+    let [cy, bob, dee] = bundle();
+    let (_, app) = open_file("file-list", &[cy, bob, dee].concat());
+    assert_eq!(listed(&app), ["Bob Brown", "Cy Cole", "Dee Diaz"]);
+}
+
+#[test]
+fn n_in_a_file_appends_a_card_after_the_last_one_with_its_line_endings() {
+    for (test, eol) in [("file-new-crlf", "\r\n"), ("file-new-lf", "\n")] {
+        let original = bundle().concat().replace("\r\n", eol);
+        let (path, mut app) = open_file(test, &original);
+        add_ann_lee(&mut app);
+
+        assert_eq!(app.mode(), Mode::Browse);
+        let text = fs::read_to_string(&path).unwrap();
+        let uid = uid_of(&text);
+        let ann = format!(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nN:Lee;Ann;;;\r\nFN:Ann Lee\r\nEND:VCARD\r\n"
+        )
+        .replace("\r\n", eol);
+        assert_eq!(text, original.clone() + &ann);
+        assert_eq!(vcf_files(path.parent().unwrap()).len(), 2);
+        assert_eq!(
+            listed(&app),
+            ["Bob Brown", "Cy Cole", "Dee Diaz", "Ann Lee"]
+        );
+        assert_eq!(app.selected_card().unwrap().display_name(), "Ann Lee");
+    }
+}
+
+#[test]
+fn a_single_card_file_becomes_a_bundle_and_its_cards_stay_editable() {
+    let [cy, ..] = bundle();
+    let (path, mut app) = open_file("file-grow", &cy);
+    add_ann_lee(&mut app);
+    select(&mut app, "Ann Lee");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Ann", "Kim");
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.starts_with(&cy), "{text}");
+    assert!(text[cy.len()..].contains("N:Lee;Kim;;;\r\n"), "{text}");
+    let app = App::new(vdir::load(&path).unwrap());
+    assert_eq!(listed(&app), ["Cy Cole", "Kim Lee"]);
+}
+
+#[test]
+fn appending_after_a_last_card_without_a_final_newline_keeps_cards_apart() {
+    let [cy, bob, _] = bundle();
+    let unterminated = bob.trim_end().to_owned();
+    let (path, mut app) = open_file("file-no-eol", &[cy.as_str(), &unterminated].concat());
+    add_ann_lee(&mut app);
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    save(&mut app);
+
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(
+        text.starts_with(&[cy, bob.replace("Bob", "Rob")].concat()),
+        "{text}"
+    );
+    let app = App::new(vdir::load(&path).unwrap());
+    assert_eq!(listed(&app), ["Rob Brown", "Cy Cole", "Ann Lee"]);
+}
+
+#[test]
+fn adding_a_card_after_the_file_changed_on_disk_prompts() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_file("file-new-conflict", &[cy.as_str(), &bob, &dee].concat());
+    let external = [cy, bob, dee.replace("Dee", "Dora")].concat();
+    fs::write(&path, &external).unwrap();
+    add_ann_lee(&mut app);
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Changed));
+    assert_eq!(fs::read_to_string(&path).unwrap(), external);
+
+    press(&mut app, KeyCode::Char('r'));
+    assert_eq!(listed(&app), ["Bob Brown", "Cy Cole", "Dora Diaz"]);
+}

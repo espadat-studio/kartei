@@ -20,7 +20,7 @@ cargo install --git https://github.com/espadat-studio/kartei
 
 ## Choose the address book
 
-kartei reads one flat directory of `.vcf` files. Pass it as the only argument:
+kartei reads one flat directory of `.vcf` files, or a single `.vcf` file. Pass it as the only argument:
 
 ```bash
 kartei ~/.local/share/contacts
@@ -33,7 +33,9 @@ export KARTEI_DIR=~/.local/share/contacts
 kartei
 ```
 
-The argument wins over `KARTEI_DIR`. With neither, or with a path that is missing or unreadable, kartei prints the error and exits with status 1.
+A single file, such as a Thunderbird export, works the same way: `kartei Contacts.vcf`. New contacts go after the file's last one, with its line endings. In a directory, each new contact gets its own `<uid>.vcf`.
+
+The argument wins over `KARTEI_DIR`. With neither, or with a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1.
 
 ## Sync with vdirsyncer
 

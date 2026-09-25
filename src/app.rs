@@ -35,7 +35,7 @@ impl Draft {
 }
 
 pub struct App {
-    dir: PathBuf,
+    path: PathBuf,
     cards: Vec<(Location, Card)>,
     files: HashMap<PathBuf, Vec<Vec<u8>>>,
     skipped: Vec<Skipped>,
@@ -53,14 +53,14 @@ pub struct App {
 impl App {
     pub fn new(book: AddressBook) -> Self {
         let AddressBook {
-            dir,
+            path,
             mut cards,
             files,
             skipped,
         } = book;
         cards.sort_by_cached_key(|(_, card)| sort_key(card));
         Self {
-            dir,
+            path,
             visible: (0..cards.len()).collect(),
             cards,
             files,
@@ -134,8 +134,14 @@ impl App {
 
     fn new_card(&mut self) {
         let uid = Uuid::new_v4().to_string();
-        let path = self.dir.join(format!("{uid}.vcf"));
-        self.start_draft((path, 0), Card::new(&uid), true);
+        let (location, eol) = match self.files.get(&self.path) {
+            Some(chunks) => (
+                (self.path.clone(), chunks.len()),
+                vdir::eol(&chunks.concat()),
+            ),
+            None => ((self.path.join(format!("{uid}.vcf")), 0), "\r\n"),
+        };
+        self.start_draft(location, Card::new(&uid, eol), true);
     }
 
     fn start_draft(&mut self, location: Location, card: Card, is_new: bool) {
@@ -197,10 +203,11 @@ impl App {
     fn save(&mut self) {
         let draft = self.draft.as_ref().expect("edit mode has a draft");
         let is_edited = draft.edited().is_ok_and(|edited| edited != draft.card);
-        if draft.is_new || !is_edited {
+        let (path, _) = &draft.location;
+        let is_new_file = draft.is_new && !self.files.contains_key(path);
+        if is_new_file || !is_edited {
             return self.write();
         }
-        let (path, _) = &draft.location;
         match vdir::conflict(path, &self.files[path].concat()) {
             Ok(None) => self.write(),
             Ok(Some(conflict)) => self.mode = Mode::Conflict(conflict),
@@ -224,7 +231,7 @@ impl App {
         let location = draft.location.clone();
         let (path, index) = &location;
         let chunks = match draft.is_new {
-            true => vec![edited.to_bytes()],
+            true => vdir::append(self.files.get(path).cloned(), edited.to_bytes()),
             false => {
                 let mut chunks = self.files[path].clone();
                 chunks[*index] = edited.to_bytes();
@@ -235,17 +242,19 @@ impl App {
             self.error = Some(format!("save failed: {err}"));
             return;
         }
-        self.files.insert(path.clone(), chunks);
-        match self.cards.iter_mut().find(|(l, _)| *l == location) {
-            Some((_, card)) => *card = edited,
-            None => self.cards.push((location.clone(), edited)),
+        self.cards.retain(|((p, _), _)| p != path);
+        for (i, chunk) in chunks.iter().enumerate() {
+            if let Ok(card) = Card::parse(chunk) {
+                self.cards.push(((path.clone(), i), card));
+            }
         }
+        self.files.insert(path.clone(), chunks);
         self.close_form();
         self.show(Some(&location));
     }
 
     fn reload(&mut self, location: Option<Location>) {
-        match vdir::load(&self.dir) {
+        match vdir::load(&self.path) {
             Ok(book) => {
                 self.cards = book.cards;
                 self.files = book.files;

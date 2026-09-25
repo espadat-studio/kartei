@@ -7,7 +7,7 @@ use crate::card::{Card, Defect};
 
 #[derive(Debug, Default)]
 pub struct AddressBook {
-    pub dir: PathBuf,
+    pub path: PathBuf,
     pub cards: Vec<(Location, Card)>,
     pub files: HashMap<PathBuf, Vec<Vec<u8>>>,
     pub skipped: Vec<Skipped>,
@@ -36,16 +36,27 @@ pub fn conflict(path: &Path, loaded: &[u8]) -> io::Result<Option<Conflict>> {
     }
 }
 
-pub fn load(dir: &Path) -> io::Result<AddressBook> {
+pub fn load(path: &Path) -> io::Result<AddressBook> {
+    let paths = if fs::metadata(path)?.is_dir() {
+        fs::read_dir(path)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<io::Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|path| is_vcf(path))
+            .collect()
+    } else if is_vcf(path) {
+        vec![path.to_owned()]
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a directory or .vcf file",
+        ));
+    };
     let mut book = AddressBook {
-        dir: dir.to_owned(),
+        path: path.to_owned(),
         ..AddressBook::default()
     };
-    for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.extension().is_none_or(|ext| ext != "vcf") {
-            continue;
-        }
+    for path in paths {
         let bytes = fs::read(&path)?;
         let chunks: Vec<Vec<u8>> = split(&bytes).into_iter().map(<[u8]>::to_vec).collect();
         for (index, chunk) in chunks.iter().enumerate() {
@@ -61,6 +72,30 @@ pub fn load(dir: &Path) -> io::Result<AddressBook> {
     }
     book.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(book)
+}
+
+fn is_vcf(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| ext == "vcf")
+}
+
+pub fn eol(bytes: &[u8]) -> &'static str {
+    match bytes.iter().position(|&b| b == b'\n') {
+        Some(i) if i > 0 && bytes[i - 1] != b'\r' => "\n",
+        _ => "\r\n",
+    }
+}
+
+pub fn append(chunks: Option<Vec<Vec<u8>>>, card: Vec<u8>) -> Vec<Vec<u8>> {
+    let mut chunks = chunks.unwrap_or_default();
+    let eol = eol(&chunks.concat());
+    if let Some(last) = chunks.last_mut()
+        && !last.is_empty()
+        && !last.ends_with(b"\n")
+    {
+        last.extend_from_slice(eol.as_bytes());
+    }
+    chunks.push(card);
+    chunks
 }
 
 pub fn split(bytes: &[u8]) -> Vec<&[u8]> {
@@ -86,7 +121,10 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".tmp");
     let temp = PathBuf::from(temp);
-    let dir = path.parent().expect("card path is inside the address book");
+    let dir = match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    };
     let result = write_synced(&temp, bytes, path)
         .and_then(|()| fs::rename(&temp, path))
         .and_then(|()| File::open(dir)?.sync_all());
