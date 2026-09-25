@@ -1,5 +1,6 @@
 pub mod app;
 pub mod card;
+pub mod editor;
 pub mod form;
 pub mod input;
 pub mod osc52;
