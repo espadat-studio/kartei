@@ -14,15 +14,15 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let dir = PathBuf::from(dir);
-    let cards = match vdir::load(&dir) {
-        Ok(cards) => cards,
+    let book = match vdir::load(&dir) {
+        Ok(book) => book,
         Err(err) => {
             eprintln!("kartei: {}: {err}", dir.display());
             return ExitCode::FAILURE;
         }
     };
 
-    let result = run(&mut ratatui::init(), App::new(cards));
+    let result = run(&mut ratatui::init(), App::new(book));
     ratatui::restore();
     if let Err(err) = result {
         eprintln!("kartei: {err}");
