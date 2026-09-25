@@ -2026,3 +2026,22 @@ fn a_failed_editor_shows_the_error() {
         &["edit failed", "$VISUAL", "$EDITOR"],
     );
 }
+
+#[test]
+fn a_raw_edit_that_fails_to_save_shows_the_error_with_the_prompt() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = address_book("raw-save-failed", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    raw_edit(&mut app, "Anna Adams");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+    let hanna = ANNA.replace("Anna", "Hanna");
+    app.finish_raw_edit(Ok(hanna.clone().into_bytes()));
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(app.mode(), Mode::Invalid("save failed"));
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &["save failed: ", "e edit again", "d discard"],
+    );
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(app.take_editor_request(), Some(hanna.into_bytes()));
+}

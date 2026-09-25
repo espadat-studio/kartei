@@ -24,8 +24,16 @@ pub fn run(bytes: &[u8]) -> io::Result<Vec<u8>> {
         drop(file);
         edit(editor, &path)
     });
-    fs::remove_file(&path)?;
-    edited
+    let removed = match fs::remove_file(&path) {
+        Err(err) if err.kind() != io::ErrorKind::NotFound => Err(io::Error::new(
+            err.kind(),
+            format!("{} not deleted: {err}", path.display()),
+        )),
+        _ => Ok(()),
+    };
+    let edited = edited?;
+    removed?;
+    Ok(edited)
 }
 
 fn edit(editor: OsString, path: &Path) -> io::Result<Vec<u8>> {

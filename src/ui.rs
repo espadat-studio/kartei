@@ -97,7 +97,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Search => format!(" /{}  (Enter keep, Esc clear)", app.query()),
         Mode::Copy => " 1-9 copy  Esc close".to_owned(),
         Mode::Edit => EDIT_HINTS.to_owned(),
-        Mode::Invalid(reason) => format!(" Not saved, {reason}: e edit again  d discard"),
+        Mode::Invalid(reason) => format!(
+            " e edit again  d discard  (not saved: {})",
+            app.error().unwrap_or(reason)
+        ),
         Mode::Discard => " Discard unsaved changes? y/n".to_owned(),
         Mode::Conflict(Conflict::Changed) => {
             " Card changed on disk: r reload  o overwrite  Esc keep editing".to_owned()
@@ -120,6 +123,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         _ => HINTS.to_owned(),
     };
     let hints = match (app.error(), app.status()) {
+        _ if matches!(app.mode(), Mode::Invalid(_)) => Paragraph::new(hints),
         (Some(error), _) => Paragraph::new(format!(" {error}")).style(Color::Red),
         (None, Some(status)) => Paragraph::new(format!(" {status}")),
         (None, None) => Paragraph::new(hints),
