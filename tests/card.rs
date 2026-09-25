@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Address, Birthday, Card, Labeled, Organization};
+use kartei::card::{Address, Birthday, Card, Defect, Labeled, Organization};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(name);
-    Card::parse(&fs::read(path).unwrap())
+    Card::parse(&fs::read(path).unwrap()).unwrap()
 }
 
 fn labeled(values: &[Labeled<String>]) -> Vec<(Option<&str>, &str)> {
@@ -39,13 +39,15 @@ fn apple_grouped_labels_are_decoded() {
 
 #[test]
 fn values_without_type_or_group_have_no_label() {
-    let card = Card::parse(b"BEGIN:VCARD\r\nTEL:1\r\nitem1.EMAIL:a@b\r\nEND:VCARD\r\n");
+    let card = Card::parse(b"BEGIN:VCARD\r\nTEL:1\r\nitem1.EMAIL:a@b\r\nEND:VCARD\r\n").unwrap();
     assert_eq!(labeled(&card.phones()), [(None, "1")]);
     assert_eq!(labeled(&card.emails()), [(None, "a@b")]);
 }
 
 fn birthday(bday: &str) -> Option<Birthday> {
-    Card::parse(format!("BEGIN:VCARD\r\n{bday}\r\nEND:VCARD\r\n").as_bytes()).birthday()
+    Card::parse(format!("BEGIN:VCARD\r\n{bday}\r\nEND:VCARD\r\n").as_bytes())
+        .unwrap()
+        .birthday()
 }
 
 fn date(year: Option<u16>, month: u8, day: u8) -> Option<Birthday> {
@@ -135,7 +137,9 @@ fn grouped_address_with_missing_components_reads_empty() {
     assert_eq!(addresses[0].label.as_deref(), Some("home"));
     assert_eq!(addresses[0].value.street, "Calle Mayor 1");
     assert_eq!(addresses[0].value.postal_code, "28013");
-    let short = Card::parse(b"BEGIN:VCARD\r\nADR:;;Main St\r\nEND:VCARD\r\n").addresses();
+    let short = Card::parse(b"BEGIN:VCARD\r\nADR:;;Main St\r\nEND:VCARD\r\n")
+        .unwrap()
+        .addresses();
     assert_eq!(short[0].value.street, "Main St");
     assert_eq!(short[0].value.country, "");
 }
@@ -169,4 +173,26 @@ fn card_without_organization_or_note_has_none() {
     assert_eq!(card.organization(), None);
     assert_eq!(card.note(), None);
     assert!(card.urls().is_empty());
+}
+
+fn defect(name: &str) -> Defect {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    Card::parse(&fs::read(path).unwrap()).unwrap_err()
+}
+
+#[test]
+fn files_that_are_not_a_single_card_are_rejected() {
+    assert_eq!(defect("bad-no-begin.vcf"), Defect::NoBegin);
+    assert_eq!(defect("bad-no-end.vcf"), Defect::NoEnd);
+    assert_eq!(defect("bad-multiple-vcards.vcf"), Defect::MultipleCards);
+    assert_eq!(defect("bad-invalid-utf8.vcf"), Defect::InvalidUtf8);
+    assert_eq!(Card::parse(b""), Err(Defect::NoBegin));
+}
+
+#[test]
+fn blank_lines_around_a_card_are_accepted() {
+    let card = Card::parse(b"\r\nBEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n\r\n").unwrap();
+    assert_eq!(card.display_name(), "x");
 }
