@@ -5,11 +5,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph};
 
 use crate::app::{App, Mode};
-use crate::card::{Card, Field};
-use crate::form::{FIELDS, Form};
+use crate::card::Card;
+use crate::form::Form;
 
 const HINTS: &str = " j/k move  / search  e edit  ? help  q quit";
-const EDIT_HINTS: &str = " Tab/S-Tab move  Ctrl-s save  Esc cancel";
+const EDIT_HINTS: &str =
+    " Tab/S-Tab move  Alt-a/d add/remove  Alt-l label  Ctrl-s save  Esc cancel";
 const LABEL_WIDTH: u16 = 13;
 
 const KEYMAP: &[(&str, &[(&str, &str)])] = &[
@@ -28,7 +29,7 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Search",
         &[
-            ("type", "filter by name, company, email, phone"),
+            ("type", "filter cards"),
             ("Backspace", "delete"),
             ("Enter", "keep filter"),
             ("Esc", "clear filter"),
@@ -37,7 +38,10 @@ const KEYMAP: &[(&str, &[(&str, &str)])] = &[
     (
         "Edit",
         &[
-            ("Tab/S-Tab Up/Down", "next/previous field"),
+            ("Tab/Down", "next field"),
+            ("S-Tab/Up", "previous field"),
+            ("Alt-a/Alt-d", "add/remove value"),
+            ("Alt-l", "cycle label"),
             ("Ctrl-s", "save"),
             ("Esc", "cancel"),
         ],
@@ -87,7 +91,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         frame.render_widget(Paragraph::new(skipped).right_aligned(), status);
     }
     match app.mode() {
-        Mode::Prompt => draw_overlay(frame, "Skipped cards", skipped(app)),
+        Mode::Prompt => draw_overlay(frame, "Skipped cards", vec![skipped(app)]),
         Mode::Help => draw_overlay(frame, "Keys", keymap()),
         Mode::Browse | Mode::Search | Mode::Edit | Mode::Discard => {}
     }
@@ -96,18 +100,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
 fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     let mut lines = Vec::new();
     let mut cursor = None;
-    for (i, ((field, label), input)) in FIELDS.iter().zip(form.inputs()).enumerate() {
+    for (i, row) in form.rows().into_iter().enumerate() {
         let style = match i == form.focus() {
             true => Style::new().add_modifier(Modifier::BOLD),
             false => Style::new(),
         };
         if i == form.focus() {
-            let (row, col) = input.cursor();
-            let y = area.y + 1 + lines.len() as u16 + row;
-            cursor = Some(Position::new(area.x + 1 + LABEL_WIDTH + col, y));
+            let (y, x) = row.input.cursor();
+            cursor = Some((lines.len() as u16 + y, LABEL_WIDTH + x));
         }
-        for (row, text) in input.text().split('\n').enumerate() {
-            let label = if row == 0 { label } else { "" };
+        for (n, text) in row.input.text().split('\n').enumerate() {
+            let label = if n == 0 { row.label } else { "" };
             let mut line = Line::from(vec![
                 Span::styled(
                     format!("{label:<width$}", width = LABEL_WIDTH.into()),
@@ -115,23 +118,22 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 ),
                 Span::raw(text.to_owned()),
             ]);
-            if *field == Field::DisplayName {
-                let link = if form.is_linked() {
-                    "  (linked)"
-                } else {
-                    "  (custom)"
-                };
-                line.push_span(Span::styled(link, Modifier::DIM));
+            if let Some(suffix) = row.suffix.as_ref().filter(|_| n == 0) {
+                line.push_span(Span::styled(format!("  {suffix}"), Modifier::DIM));
             }
             lines.push(line);
         }
     }
+    let height = area.height.saturating_sub(2);
+    let scroll = cursor.map_or(0, |(y, _)| (y + 1).saturating_sub(height));
     frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("Edit")),
+        Paragraph::new(lines)
+            .scroll((scroll, 0))
+            .block(Block::bordered().title("Edit")),
         area,
     );
-    if let Some(cursor) = cursor {
-        frame.set_cursor_position(cursor);
+    if let Some((y, x)) = cursor {
+        frame.set_cursor_position(Position::new(area.x + 1 + x, area.y + 1 + y - scroll));
     }
 }
 
@@ -147,29 +149,35 @@ fn skipped(app: &App) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn keymap() -> Vec<Line<'static>> {
-    KEYMAP
-        .iter()
-        .flat_map(|(mode, keys)| {
-            let keys = keys
+fn keymap() -> Vec<Vec<Line<'static>>> {
+    let (left, right) = KEYMAP.split_at(2);
+    [left, right]
+        .map(|modes| {
+            modes
                 .iter()
-                .map(|(key, action)| Line::from(format!("  {key:<12} {action}")));
-            std::iter::once(Line::styled(*mode, Modifier::BOLD)).chain(keys)
+                .flat_map(|(mode, keys)| {
+                    let keys = keys
+                        .iter()
+                        .map(|(key, action)| Line::from(format!("  {key:<12} {action}")));
+                    std::iter::once(Line::styled(*mode, Modifier::BOLD)).chain(keys)
+                })
+                .collect()
         })
-        .collect()
+        .into()
 }
 
-fn draw_overlay(frame: &mut Frame, title: &str, lines: Vec<Line>) {
+fn draw_overlay(frame: &mut Frame, title: &str, columns: Vec<Vec<Line>>) {
     let area = frame.area().inner(Margin::new(2, 1));
+    let block = Block::bordered()
+        .title(title)
+        .title_bottom(" any key closes ");
     frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .title(title)
-                .title_bottom(" any key closes "),
-        ),
-        area,
-    );
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let areas = Layout::horizontal(vec![Constraint::Fill(1); columns.len()]).split(inner);
+    for (lines, column) in columns.into_iter().zip(areas.iter()) {
+        frame.render_widget(Paragraph::new(lines), *column);
+    }
 }
 
 fn skipped_count(count: usize) -> Option<String> {

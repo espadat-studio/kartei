@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{self, Address, Birthday, Card, Defect, Field, Labeled, Organization};
+use kartei::card::{self, Address, Birthday, Card, Defect, Field, Kind, Labeled, Organization};
 
 fn fixture(name: &str) -> Card {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -278,4 +278,38 @@ fn display_name_derives_from_name_parts_in_reading_order() {
         card::derived_display_name(|field| parts(field).to_owned()),
         "Dr. Jane Doe PhD"
     );
+}
+
+#[test]
+fn relabeling_a_value_replaces_its_label_types_and_keeps_the_others() {
+    let mut card =
+        Card::parse(b"BEGIN:VCARD\r\nTEL;type=CELL;type=VOICE:1\r\nEND:VCARD\r\n").unwrap();
+    card.update(Kind::Phone, 0, &["1".into()], Some("other"));
+    assert_eq!(
+        card.to_bytes(),
+        b"BEGIN:VCARD\r\nTEL;type=VOICE;TYPE=OTHER:1\r\nEND:VCARD\r\n"
+    );
+}
+
+#[test]
+fn relabeling_a_grouped_value_drops_its_apple_label_and_keeps_the_group() {
+    let mut card = Card::parse(
+        b"BEGIN:VCARD\r\nitem1.TEL;type=pref:1\r\nitem1.X-ABLabel:Gym\r\nEND:VCARD\r\n",
+    )
+    .unwrap();
+    card.update(Kind::Phone, 0, &["1".into()], Some("work"));
+    assert_eq!(
+        card.to_bytes(),
+        b"BEGIN:VCARD\r\nitem1.TEL;type=pref;TYPE=WORK:1\r\nEND:VCARD\r\n"
+    );
+    assert_eq!(card.phones()[0].label.as_deref(), Some("work"));
+}
+
+#[test]
+fn labels_cycle_through_home_work_cell_other() {
+    assert_eq!(card::next_label(None), "home");
+    assert_eq!(card::next_label(Some("Gym")), "home");
+    assert_eq!(card::next_label(Some("home")), "work");
+    assert_eq!(card::next_label(Some("cell")), "other");
+    assert_eq!(card::next_label(Some("other")), "home");
 }

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kartei::card::{Card, Field};
+use kartei::card::{Card, Field, Kind, Labeled};
 use proptest::prelude::*;
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -243,5 +243,68 @@ proptest! {
             prop_assert!(content.len() <= 75, "{} octets", content.len());
             prop_assert!(std::str::from_utf8(content).is_ok());
         }
+    }
+}
+
+const KINDS: [(Kind, &str, usize); 2] = [(Kind::Phone, "TEL", 1), (Kind::Email, "EMAIL", 1)];
+
+fn outside_value(card: &Card, property: &str, n: usize) -> Vec<Vec<u8>> {
+    let target = card
+        .lines()
+        .iter()
+        .filter(|l| l.name().eq_ignore_ascii_case(property))
+        .nth(n)
+        .unwrap();
+    let group = target.group().map(str::to_lowercase);
+    card.lines()
+        .iter()
+        .filter(|l| !std::ptr::eq(*l, target))
+        .filter(|l| group.is_none() || l.group().map(str::to_lowercase) != group)
+        .map(|l| l.raw().to_vec())
+        .collect()
+}
+
+fn raw_lines(card: &Card) -> Vec<Vec<u8>> {
+    card.lines().iter().map(|l| l.raw().to_vec()).collect()
+}
+
+proptest! {
+    #[test]
+    fn a_multi_value_edit_changes_only_that_values_lines(
+        name in proptest::sample::select(good_fixtures()),
+        kind in 0..KINDS.len(),
+        op in 0..3,
+        pick in any::<usize>(),
+        values in proptest::collection::vec("[^\r]{1,40}", 5),
+        label in proptest::option::of(proptest::sample::select(vec!["home", "work", "cell", "other"])),
+    ) {
+        let before = Card::parse(&fixture(&name)).unwrap();
+        let (kind, property, len) = KINDS[kind];
+        let value = values[..len].to_vec();
+        let mut expected = before.entries(kind);
+        let mut after = before.clone();
+        let n = pick % expected.len().max(1);
+        match op {
+            1 if !expected.is_empty() => {
+                after.remove(kind, n);
+                prop_assert_eq!(raw_lines(&after), outside_value(&before, property, n));
+                expected.remove(n);
+            }
+            2 if !expected.is_empty() => {
+                let label = label.map(str::to_owned).or(expected[n].label.clone());
+                after.update(kind, n, &value, label.as_deref());
+                prop_assert_eq!(outside_value(&after, property, n), outside_value(&before, property, n));
+                expected[n] = Labeled { label, value };
+            }
+            _ => {
+                after.add(kind, &value, label);
+                let mut lines = raw_lines(&after);
+                lines.remove(lines.len() - 2);
+                prop_assert_eq!(lines, raw_lines(&before));
+                expected.push(Labeled { label: label.map(str::to_owned), value });
+            }
+        }
+        let reparsed = Card::parse(&after.to_bytes()).unwrap();
+        prop_assert_eq!(reparsed.entries(kind), expected);
     }
 }

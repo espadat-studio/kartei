@@ -24,23 +24,30 @@ impl ContentLine {
         })
     }
 
-    pub(crate) fn new(name: &str, value: &str, eol: &str) -> Self {
-        Self::build(&format!("{name}:{value}"), eol)
-    }
-
-    pub(crate) fn with_value(&self, value: &str) -> Self {
-        let mut logical = self
-            .group
-            .as_ref()
-            .map_or_else(String::new, |group| format!("{group}."));
-        logical.push_str(&self.name);
-        for param in &self.params {
+    pub(crate) fn new(
+        group: Option<&str>,
+        name: &str,
+        params: &[String],
+        value: &str,
+        eol: &str,
+    ) -> Self {
+        let mut logical = group.map_or_else(String::new, |group| format!("{group}."));
+        logical.push_str(name);
+        for param in params {
             logical.push(';');
             logical.push_str(param);
         }
         logical.push(':');
         logical.push_str(value);
-        Self::build(&logical, self.eol())
+        Self::build(&logical, eol)
+    }
+
+    pub(crate) fn with(&self, params: &[String], value: &str) -> Self {
+        Self::new(self.group(), &self.name, params, value, self.eol())
+    }
+
+    pub(crate) fn with_value(&self, value: &str) -> Self {
+        self.with(&self.params, value)
     }
 
     fn build(logical: &str, eol: &str) -> Self {

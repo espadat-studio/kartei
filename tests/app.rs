@@ -630,7 +630,7 @@ fn multi_line_note_and_non_ascii_text_round_trip_through_the_form() {
     type_text(&mut app, "Zeile 1");
     press(&mut app, KeyCode::Enter);
     type_text(&mut app, "Grüße, 日本");
-    for _ in 0..5 {
+    for _ in 0..7 {
         press(&mut app, KeyCode::Up);
     }
     for _ in "Adams".chars() {
@@ -734,4 +734,117 @@ fn a_custom_display_name_stays_custom_when_the_structured_name_catches_up_with_i
     let detail = detail(&screen(&app));
     assert_shows(&detail, &["Jon Do", "(custom)"]);
     assert!(!detail.contains("Jona Do"), "{detail}");
+}
+
+fn alt(app: &mut App, c: char) {
+    app.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT));
+}
+
+fn tab(app: &mut App, times: usize) {
+    for _ in 0..times {
+        press(app, KeyCode::Tab);
+    }
+}
+
+const FIRST_VALUE: usize = 8;
+
+fn open_fixture(test: &str, name: &str) -> (PathBuf, String, App) {
+    let original = fs::read_to_string(fixtures_dir().join(name)).unwrap();
+    let dir = address_book(test, &[(name, &original)]);
+    let app = App::new(vdir::load(&dir).unwrap());
+    (dir.join(name), original, app)
+}
+
+#[test]
+fn editing_a_grouped_phone_rewrites_only_its_tel_line() {
+    let (path, original, mut app) = open_fixture("edit-grouped-tel", "apple-grouped-labels.vcf");
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE);
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Backspace);
+    }
+    type_text(&mut app, "999");
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        original.replace(
+            "item1.TEL;type=pref:+34 600 111 222",
+            "item1.TEL;type=pref:+34 600 111 999"
+        )
+    );
+}
+
+#[test]
+fn removing_a_grouped_email_removes_its_whole_group() {
+    let (path, original, mut app) =
+        open_fixture("remove-grouped-email", "apple-grouped-labels.vcf");
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE + 4);
+    assert_shows(&detail(&screen(&app)), &["gabi@work.example  (Work)"]);
+    alt(&mut app, 'd');
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        original.replace(
+            "item3.EMAIL;type=INTERNET:gabi@work.example\r\nitem3.X-ABLabel:_$!<Work>!$_\r\n",
+            ""
+        )
+    );
+}
+
+#[test]
+fn adding_a_phone_with_a_cycled_label_writes_one_typed_tel_line() {
+    let dir = address_book("add-work-tel", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE);
+    alt(&mut app, 'a');
+    type_text(&mut app, "+1 555 0009");
+    alt(&mut app, 'l');
+    alt(&mut app, 'l');
+    assert_shows(&detail(&screen(&app)), &["+1 555 0009  (work)"]);
+    save(&mut app);
+
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace("END:VCARD", "TEL;TYPE=WORK:+1 555 0009\r\nEND:VCARD")
+    );
+}
+
+#[test]
+fn a_card_without_emails_offers_a_blank_email_that_is_only_written_when_filled() {
+    let dir = address_book("blank-email", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE + 1);
+    alt(&mut app, 'd');
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE + 1);
+    type_text(&mut app, "anna@example.org");
+    save(&mut app);
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace("END:VCARD", "EMAIL:anna@example.org\r\nEND:VCARD")
+    );
+}
+
+#[test]
+fn clearing_a_phone_removes_its_line() {
+    let dir = address_book("clear-tel", &[("anna.vcf", ANNA)]);
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    press(&mut app, KeyCode::Char('e'));
+    tab(&mut app, FIRST_VALUE);
+    for _ in "+1 555 0002".chars() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    save(&mut app);
+    assert_eq!(
+        fs::read_to_string(dir.join("anna.vcf")).unwrap(),
+        ANNA.replace("TEL:+1 555 0002\r\n", "")
+    );
 }

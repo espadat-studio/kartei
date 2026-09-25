@@ -5,6 +5,7 @@ mod line;
 use std::fmt;
 
 pub use bday::Birthday;
+pub use label::next as next_label;
 pub use line::ContentLine;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +74,21 @@ impl Field {
             Self::Company => ("ORG", Some(0)),
             Self::Department => ("ORG", Some(1)),
             Self::Note => ("NOTE", None),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Phone,
+    Email,
+}
+
+impl Kind {
+    fn property(self) -> &'static str {
+        match self {
+            Self::Phone => "TEL",
+            Self::Email => "EMAIL",
         }
     }
 }
@@ -189,21 +205,80 @@ impl Card {
                 self.lines.remove(index);
             }
             Some(index) => self.lines[index] = self.lines[index].with_value(&raw),
+            None => self.insert(name, &[], &raw),
+        }
+    }
+
+    pub fn entries(&self, kind: Kind) -> Vec<Labeled<Vec<String>>> {
+        self.labeled(kind.property(), |value| vec![line::unescape(value)])
+    }
+
+    pub fn update(&mut self, kind: Kind, n: usize, value: &[String], label: Option<&str>) {
+        let index = self.position(kind, n);
+        let property = &self.lines[index];
+        let is_relabeled = self.label(property).as_deref() != label;
+        let raw = match line::unescape(property.value()) == value[0] {
+            true => property.value().to_owned(),
+            false => line::escape(&value[0]),
+        };
+        if !is_relabeled && raw == property.value() {
+            return;
+        }
+        let params = match is_relabeled {
+            true => label::retype(property.params(), label),
+            false => property.params().to_vec(),
+        };
+        let group = property.group().map(str::to_owned);
+        self.lines[index] = property.with(&params, &raw);
+        if is_relabeled && let Some(group) = group {
+            self.lines.retain(|l| {
+                !(l.name().eq_ignore_ascii_case("X-ABLabel")
+                    && l.group().is_some_and(|g| g.eq_ignore_ascii_case(&group)))
+            });
+        }
+    }
+
+    pub fn add(&mut self, kind: Kind, value: &[String], label: Option<&str>) {
+        let params = label::retype(&[], label);
+        self.insert(kind.property(), &params, &line::escape(&value[0]));
+    }
+
+    pub fn remove(&mut self, kind: Kind, n: usize) {
+        let index = self.position(kind, n);
+        match self.lines[index].group().map(str::to_owned) {
+            Some(group) => self
+                .lines
+                .retain(|l| !l.group().is_some_and(|g| g.eq_ignore_ascii_case(&group))),
             None => {
-                let end = self
-                    .lines
-                    .iter()
-                    .rposition(|l| l.is("END", "VCARD"))
-                    .expect("parsed card ends with END:VCARD");
-                let eol = self
-                    .lines
-                    .iter()
-                    .find(|l| l.is("BEGIN", "VCARD"))
-                    .expect("parsed card starts with BEGIN:VCARD")
-                    .eol();
-                self.lines.insert(end, ContentLine::new(name, &raw, eol));
+                self.lines.remove(index);
             }
         }
+    }
+
+    fn position(&self, kind: Kind, n: usize) -> usize {
+        self.lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.name().eq_ignore_ascii_case(kind.property()))
+            .nth(n)
+            .map(|(i, _)| i)
+            .expect("value index comes from this card's entries")
+    }
+
+    fn insert(&mut self, name: &str, params: &[String], raw: &str) {
+        let end = self
+            .lines
+            .iter()
+            .rposition(|l| l.is("END", "VCARD"))
+            .expect("parsed card ends with END:VCARD");
+        let eol = self
+            .lines
+            .iter()
+            .find(|l| l.is("BEGIN", "VCARD"))
+            .expect("parsed card starts with BEGIN:VCARD")
+            .eol();
+        self.lines
+            .insert(end, ContentLine::new(None, name, params, raw, eol));
     }
 
     pub fn display_name(&self) -> String {
