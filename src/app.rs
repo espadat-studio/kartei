@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -6,7 +7,7 @@ use uuid::Uuid;
 use crate::card::Card;
 use crate::form::Form;
 use crate::osc52;
-use crate::vdir::{self, AddressBook, Conflict, Skipped};
+use crate::vdir::{self, AddressBook, Conflict, Location, Skipped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -21,7 +22,7 @@ pub enum Mode {
 }
 
 struct Draft {
-    path: PathBuf,
+    location: Location,
     card: Card,
     form: Form,
     is_new: bool,
@@ -35,7 +36,8 @@ impl Draft {
 
 pub struct App {
     dir: PathBuf,
-    cards: Vec<(PathBuf, Card)>,
+    cards: Vec<(Location, Card)>,
+    files: HashMap<PathBuf, Vec<Vec<u8>>>,
     skipped: Vec<Skipped>,
     query: String,
     visible: Vec<usize>,
@@ -53,6 +55,7 @@ impl App {
         let AddressBook {
             dir,
             mut cards,
+            files,
             skipped,
         } = book;
         cards.sort_by_cached_key(|(_, card)| sort_key(card));
@@ -60,6 +63,7 @@ impl App {
             dir,
             visible: (0..cards.len()).collect(),
             cards,
+            files,
             skipped,
             query: String::new(),
             selected: 0,
@@ -96,7 +100,7 @@ impl App {
             KeyCode::Char('/') => self.mode = Mode::Search,
             KeyCode::Char('e') | KeyCode::Enter => self.open_form(),
             KeyCode::Char('n') => self.new_card(),
-            KeyCode::Char('R') => self.reload(self.selected_path()),
+            KeyCode::Char('R') => self.reload(self.selected_location()),
             KeyCode::Char('y') if !self.copyable().is_empty() => self.mode = Mode::Copy,
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('!') if !self.skipped.is_empty() => self.mode = Mode::Prompt,
@@ -123,20 +127,20 @@ impl App {
 
     fn open_form(&mut self) {
         if let Some(&index) = self.visible.get(self.selected) {
-            let (path, card) = &self.cards[index];
-            self.start_draft(path.clone(), card.clone(), false);
+            let (location, card) = &self.cards[index];
+            self.start_draft(location.clone(), card.clone(), false);
         }
     }
 
     fn new_card(&mut self) {
         let uid = Uuid::new_v4().to_string();
         let path = self.dir.join(format!("{uid}.vcf"));
-        self.start_draft(path, Card::new(&uid), true);
+        self.start_draft((path, 0), Card::new(&uid), true);
     }
 
-    fn start_draft(&mut self, path: PathBuf, card: Card, is_new: bool) {
+    fn start_draft(&mut self, location: Location, card: Card, is_new: bool) {
         self.draft = Some(Draft {
-            path,
+            location,
             form: Form::new(&card),
             card,
             is_new,
@@ -165,9 +169,9 @@ impl App {
     fn conflict(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('r') => {
-                let path = self.draft.take().map(|draft| draft.path);
+                let location = self.draft.take().map(|draft| draft.location);
                 self.close_form();
-                self.reload(path);
+                self.reload(location);
             }
             KeyCode::Char('o') => self.write(),
             KeyCode::Esc => self.mode = Mode::Edit,
@@ -196,7 +200,8 @@ impl App {
         if draft.is_new || !is_edited {
             return self.write();
         }
-        match vdir::conflict(&draft.path, &draft.card.to_bytes()) {
+        let (path, _) = &draft.location;
+        match vdir::conflict(path, &self.loaded(path).concat()) {
             Ok(None) => self.write(),
             Ok(Some(conflict)) => self.mode = Mode::Conflict(conflict),
             Err(err) => self.error = Some(format!("save failed: {err}")),
@@ -216,36 +221,50 @@ impl App {
         if edited == draft.card {
             return self.close_form();
         }
-        if let Err(err) = vdir::save(&draft.path, &edited.to_bytes()) {
+        let location = draft.location.clone();
+        let (path, index) = &location;
+        let mut chunks = self.loaded(path).to_vec();
+        match chunks.get_mut(*index) {
+            Some(chunk) => *chunk = edited.to_bytes(),
+            None => chunks.push(edited.to_bytes()),
+        }
+        if let Err(err) = vdir::save(path, &chunks.concat()) {
             self.error = Some(format!("save failed: {err}"));
             return;
         }
-        let path = draft.path.clone();
-        match self.cards.iter_mut().find(|(p, _)| *p == path) {
+        self.files.insert(path.clone(), chunks);
+        match self.cards.iter_mut().find(|(l, _)| *l == location) {
             Some((_, card)) => *card = edited,
-            None => self.cards.push((path.clone(), edited)),
+            None => self.cards.push((location.clone(), edited)),
         }
         self.close_form();
-        self.show(Some(&path));
+        self.show(Some(&location));
     }
 
-    fn reload(&mut self, path: Option<PathBuf>) {
+    fn loaded(&self, path: &Path) -> &[Vec<u8>] {
+        self.files.get(path).map_or(&[], Vec::as_slice)
+    }
+
+    fn reload(&mut self, location: Option<Location>) {
         match vdir::load(&self.dir) {
             Ok(book) => {
                 self.cards = book.cards;
+                self.files = book.files;
                 self.skipped = book.skipped;
-                self.show(path.as_deref());
+                self.show(location.as_ref());
             }
             Err(err) => self.error = Some(format!("reload failed: {err}")),
         }
     }
 
-    fn show(&mut self, path: Option<&Path>) {
+    fn show(&mut self, location: Option<&Location>) {
         self.cards.sort_by_cached_key(|(_, card)| sort_key(card));
-        self.filter(path.and_then(|path| self.cards.iter().position(|(p, _)| p == path)));
+        self.filter(
+            location.and_then(|location| self.cards.iter().position(|(l, _)| l == location)),
+        );
     }
 
-    fn selected_path(&self) -> Option<PathBuf> {
+    fn selected_location(&self) -> Option<Location> {
         self.visible
             .get(self.selected)
             .map(|&i| self.cards[i].0.clone())

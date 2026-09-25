@@ -34,7 +34,7 @@ Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_
 
 In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing.
 
-Files that are not exactly one valid vCard are skipped at load. The status bar counts them; `!` lists each file and the reason.
+A `.vcf` holding several Cards (a Thunderbird export) lists each one; saving rewrites only the edited Card's lines. A Card that is not valid vCard is skipped at load, the rest of its file still loads. The status bar counts skipped Cards; `!` lists each file and the reason.
 
 ## Lossless edits
 
