@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -7,9 +8,12 @@ use crate::card::{Card, Defect};
 #[derive(Debug, Default)]
 pub struct AddressBook {
     pub dir: PathBuf,
-    pub cards: Vec<(PathBuf, Card)>,
+    pub cards: Vec<(Location, Card)>,
+    pub files: HashMap<PathBuf, Vec<Vec<u8>>>,
     pub skipped: Vec<Skipped>,
 }
+
+pub type Location = (PathBuf, usize);
 
 #[derive(Debug)]
 pub struct Skipped {
@@ -42,13 +46,40 @@ pub fn load(dir: &Path) -> io::Result<AddressBook> {
         if path.extension().is_none_or(|ext| ext != "vcf") {
             continue;
         }
-        match Card::parse(&fs::read(&path)?) {
-            Ok(card) => book.cards.push((path, card)),
-            Err(defect) => book.skipped.push(Skipped { path, defect }),
+        let bytes = fs::read(&path)?;
+        let chunks: Vec<Vec<u8>> = split(&bytes).into_iter().map(<[u8]>::to_vec).collect();
+        for (index, chunk) in chunks.iter().enumerate() {
+            match Card::parse(chunk) {
+                Ok(card) => book.cards.push(((path.clone(), index), card)),
+                Err(defect) => book.skipped.push(Skipped {
+                    path: path.clone(),
+                    defect,
+                }),
+            }
         }
+        book.files.insert(path, chunks);
     }
     book.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(book)
+}
+
+pub fn split(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    let mut offset = 0;
+    let mut has_begin = false;
+    for line in bytes.split_inclusive(|&b| b == b'\n') {
+        if line.trim_ascii_end().eq_ignore_ascii_case(b"BEGIN:VCARD") {
+            if has_begin {
+                chunks.push(&bytes[start..offset]);
+                start = offset;
+            }
+            has_begin = true;
+        }
+        offset += line.len();
+    }
+    chunks.push(&bytes[start..]);
+    chunks
 }
 
 pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {

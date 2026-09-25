@@ -1,0 +1,24 @@
+BEGIN:VCARD
+VERSION:4.0
+N:Tester;Theo;;;
+FN:Theo Tester
+EMAIL;PREF=1:theo@example.org
+NOTE:Met at the Thunderbird export workshop\, where every contact ends up i
+ n one file.
+UID:3f1c2a9e-0b1d-4c7e-9a2f-000000000001
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+N:Bundle;Bea;;;
+FN:Bea Bundle
+TEL;TYPE=cell;VALUE=TEXT:+49 170 7654321
+UID:3f1c2a9e-0b1d-4c7e-9a2f-000000000002
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+N:;;;;
+FN:Mailing List Co
+ORG:Mailing List Co
+ADR;TYPE=work:;;Hauptstraße 1;Berlin;;10115;Germany
+UID:3f1c2a9e-0b1d-4c7e-9a2f-000000000003
+END:VCARD

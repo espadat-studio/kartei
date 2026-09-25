@@ -181,7 +181,6 @@ pub fn derived_display_name(part: impl Fn(Field) -> String) -> String {
 pub enum Defect {
     NoBegin,
     NoEnd,
-    MultipleCards,
     InvalidUtf8,
 }
 
@@ -190,7 +189,6 @@ impl fmt::Display for Defect {
         f.write_str(match self {
             Self::NoBegin => "no BEGIN:VCARD",
             Self::NoEnd => "no END:VCARD",
-            Self::MultipleCards => "more than one VCARD",
             Self::InvalidUtf8 => "invalid UTF-8",
         })
     }
@@ -213,9 +211,6 @@ impl Card {
         let mut content = lines.iter().filter(|l| !l.is_blank());
         if !content.next().is_some_and(|l| l.is("BEGIN", "VCARD")) {
             return Err(Defect::NoBegin);
-        }
-        if lines.iter().filter(|l| l.is("BEGIN", "VCARD")).count() > 1 {
-            return Err(Defect::MultipleCards);
         }
         if !content.next_back().is_some_and(|l| l.is("END", "VCARD")) {
             return Err(Defect::NoEnd);

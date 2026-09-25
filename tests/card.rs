@@ -186,7 +186,6 @@ fn defect(name: &str) -> Defect {
 fn files_that_are_not_a_single_card_are_rejected() {
     assert_eq!(defect("bad-no-begin.vcf"), Defect::NoBegin);
     assert_eq!(defect("bad-no-end.vcf"), Defect::NoEnd);
-    assert_eq!(defect("bad-multiple-vcards.vcf"), Defect::MultipleCards);
     assert_eq!(defect("bad-invalid-utf8.vcf"), Defect::InvalidUtf8);
     assert_eq!(Card::parse(b""), Err(Defect::NoBegin));
 }

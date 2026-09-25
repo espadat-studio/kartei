@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use kartei::card::{Card, Field, Kind, Labeled};
+use kartei::vdir;
 use proptest::prelude::*;
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -27,8 +28,11 @@ fn every_fixture_round_trips_byte_for_byte() {
             continue;
         }
         let bytes = fs::read(&path).unwrap();
-        let card = Card::parse(&bytes).unwrap();
-        assert_eq!(card.to_bytes(), bytes, "{}", path.display());
+        let written: Vec<u8> = vdir::split(&bytes)
+            .into_iter()
+            .flat_map(|chunk| Card::parse(chunk).unwrap().to_bytes())
+            .collect();
+        assert_eq!(written, bytes, "{}", path.display());
     }
 }
 
@@ -192,7 +196,7 @@ fn good_fixtures() -> Vec<String> {
         fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"))
             .unwrap()
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .filter(|name| !name.starts_with("bad-"))
+            .filter(|name| !name.starts_with("bad-") && !name.starts_with("bundle-"))
             .collect();
     names.sort();
     names
@@ -310,5 +314,43 @@ proptest! {
         }
         let reparsed = Card::parse(&after.to_bytes()).unwrap();
         prop_assert_eq!(reparsed.entries(kind), expected);
+    }
+}
+
+fn generated_card() -> impl Strategy<Value = (Vec<GeneratedLine>, &'static str)> {
+    (
+        proptest::collection::vec(generated_line(), 0..4),
+        prop_oneof![Just("\r\n"), Just("\n")],
+    )
+}
+
+proptest! {
+    #[test]
+    fn splitting_a_bundle_then_joining_the_pieces_gives_the_original_bytes(
+        cards in proptest::collection::vec(generated_card(), 1..5),
+        blanks in proptest::collection::vec(0..3usize, 5),
+        has_trailing_newline in any::<bool>(),
+    ) {
+        let mut bytes = Vec::new();
+        for (n, (lines, eol)) in cards.iter().enumerate() {
+            bytes.extend_from_slice(format!("BEGIN:VCARD{eol}").as_bytes());
+            for line in lines {
+                bytes.extend(line.physical());
+            }
+            bytes.extend_from_slice(format!("END:VCARD{eol}").as_bytes());
+            bytes.extend(eol.repeat(blanks[n]).bytes());
+        }
+        if !has_trailing_newline {
+            while bytes.last().is_some_and(|b| b.is_ascii_whitespace()) {
+                bytes.pop();
+            }
+        }
+
+        let chunks = vdir::split(&bytes);
+        prop_assert_eq!(chunks.concat(), bytes.clone());
+        prop_assert_eq!(chunks.len(), cards.len());
+        for chunk in chunks {
+            prop_assert!(Card::parse(chunk).is_ok());
+        }
     }
 }

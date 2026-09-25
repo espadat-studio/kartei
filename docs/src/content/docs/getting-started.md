@@ -68,4 +68,6 @@ kartei rewrites only the lines an edit touches. Every other line is written back
 
 ## Cards kartei skips
 
-A file without `BEGIN:VCARD`/`END:VCARD`, with several contacts, or with invalid UTF-8 is skipped at load. The status bar shows how many were skipped; press `!` to list each path and the reason.
+A `.vcf` may hold several Cards, as Thunderbird exports write; each is listed and edited on its own, and saving rewrites only that Card's lines. Any change to the file on disk since load prompts before saving.
+
+A Card without `BEGIN:VCARD`/`END:VCARD` or with invalid UTF-8 is skipped at load; the other Cards in its file still load, and its bytes are written back untouched. The status bar shows how many were skipped; press `!` to list each path and the reason.

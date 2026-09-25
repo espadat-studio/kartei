@@ -292,13 +292,13 @@ fn bad_cards_are_skipped_and_counted_in_the_status_bar() {
     let dir = copy_fixtures("skipped-count");
     let app = App::new(vdir::load(&dir).unwrap());
     let screen = screen(&app);
-    assert_eq!(app.cards().len(), 9);
+    assert_eq!(app.cards().len(), 12);
     assert!(
-        screen.last().unwrap().contains("4 cards skipped"),
+        screen.last().unwrap().contains("3 cards skipped"),
         "{}",
         screen.join("\n")
     );
-    for name in ["No Begin", "No End", "First", "Second", "Bad"] {
+    for name in ["No Begin", "No End", "Bad"] {
         assert!(!list(&screen).contains(name), "{name}");
     }
 }
@@ -324,7 +324,6 @@ fn bang_lists_every_skipped_path_with_its_reason() {
     for (file, reason) in [
         ("bad-no-begin.vcf", "no BEGIN:VCARD"),
         ("bad-no-end.vcf", "no END:VCARD"),
-        ("bad-multiple-vcards.vcf", "more than one VCARD"),
         ("bad-invalid-utf8.vcf", "invalid UTF-8"),
     ] {
         let row = row_of(&screen, &dir.join(file).display().to_string());
@@ -1274,4 +1273,186 @@ fn saving_without_edits_closes_the_form_even_if_the_file_changed() {
     save(&mut app);
     assert_eq!(app.mode(), Mode::Browse);
     assert_eq!(fs::read_to_string(dir.join("anna.vcf")).unwrap(), EXTERNAL);
+}
+
+fn bundle() -> [String; 3] {
+    [
+        card("Cole;Cy;;;", "Cy Cole", "+1 555 0101", "cy@example.org"),
+        card(
+            "Brown;Bob;;;",
+            "Bob Brown",
+            "+1 555 0102",
+            "bob@example.org",
+        ),
+        card("Diaz;Dee;;;", "Dee Diaz", "+1 555 0103", "dee@example.org"),
+    ]
+}
+
+fn open_bundle(test: &str, cards: &[&str]) -> (PathBuf, App) {
+    let dir = address_book(test, &[("bundle.vcf", &cards.concat()), ("anna.vcf", ANNA)]);
+    (dir.join("bundle.vcf"), App::new(vdir::load(&dir).unwrap()))
+}
+
+fn edit_bob_then_change_dee_on_disk(test: &str) -> (PathBuf, App, String) {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle(test, &[&cy, &bob, &dee]);
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    let external = [cy, bob, dee.replace("Dee", "Dora")].concat();
+    fs::write(&path, &external).unwrap();
+    save(&mut app);
+    (path, app, external)
+}
+
+#[test]
+fn cards_in_a_bundle_are_listed_sorted_and_searchable_next_to_single_card_files() {
+    let [cy, bob, dee] = bundle();
+    let (_, mut app) = open_bundle("bundle-list", &[&cy, &bob, &dee]);
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Bob Brown", "Cy Cole", "Dee Diaz"]
+    );
+    assert!(app.skipped().is_empty());
+
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "0103");
+    assert_eq!(listed(&app), ["Dee Diaz"]);
+    assert_shows(&detail(&screen(&app)), &["Dee Diaz", "dee@example.org"]);
+}
+
+#[test]
+fn saving_a_card_in_a_bundle_rewrites_only_its_lines() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("bundle-edit", &[&cy, &bob, &dee]);
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+    let rob = bob.replace("Bob", "Rob");
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        [cy.as_str(), &rob, &dee].concat()
+    );
+
+    select(&mut app, "Dee Diaz");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Dee", "Dora");
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        [cy, rob, dee.replace("Dee", "Dora")].concat()
+    );
+}
+
+#[test]
+fn changing_another_card_of_the_bundle_on_disk_prompts_and_keeps_the_change() {
+    let (path, app, external) = edit_bob_then_change_dee_on_disk("bundle-conflict");
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Changed));
+    assert_eq!(fs::read_to_string(path).unwrap(), external);
+}
+
+#[test]
+fn r_reloads_the_changed_bundle_and_drops_the_edit() {
+    let (path, mut app, external) = edit_bob_then_change_dee_on_disk("bundle-reload");
+    press(&mut app, KeyCode::Char('r'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Bob Brown", "Cy Cole", "Dora Diaz"]
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), external);
+}
+
+#[test]
+fn o_overwrites_the_bundle_with_the_edit_and_the_other_cards_as_loaded() {
+    let (path, mut app, _) = edit_bob_then_change_dee_on_disk("bundle-overwrite");
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(app.mode(), Mode::Browse);
+    let [cy, bob, dee] = bundle();
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        [cy, bob.replace("Bob", "Rob"), dee].concat()
+    );
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Rob Brown", "Cy Cole", "Dee Diaz"]
+    );
+}
+
+#[test]
+fn shift_r_picks_up_cards_added_to_or_removed_from_a_bundle() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("bundle-shift-r", &[&cy, &bob, &dee]);
+    let eve = card(
+        "Evans;Eve;;;",
+        "Eve Evans",
+        "+1 555 0104",
+        "eve@example.org",
+    );
+    fs::write(&path, [cy, dee, eve].concat()).unwrap();
+    press(&mut app, KeyCode::Char('R'));
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Cy Cole", "Dee Diaz", "Eve Evans"]
+    );
+}
+
+#[test]
+fn a_defective_card_in_a_bundle_is_skipped_alone_and_written_back_untouched() {
+    let [cy, _, dee] = bundle();
+    let broken = "BEGIN:VCARD\r\nFN:Broken\r\n";
+    let (path, mut app) = open_bundle("bundle-defect", &[&cy, broken, &dee]);
+    assert_eq!(listed(&app), ["Anna Adams", "Cy Cole", "Dee Diaz"]);
+    assert_eq!(app.skipped().len(), 1);
+
+    select(&mut app, "Dee Diaz");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Dee", "Dora");
+    save(&mut app);
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        [cy.as_str(), broken, &dee.replace("Dee", "Dora")].concat()
+    );
+}
+
+#[test]
+fn a_thunderbird_export_loads_every_card() {
+    let dir = address_book("bundle-thunderbird", &[]);
+    fs::copy(
+        fixtures_dir().join("bundle-thunderbird.vcf"),
+        dir.join("export.vcf"),
+    )
+    .unwrap();
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    assert!(app.skipped().is_empty());
+    assert_eq!(
+        listed(&app),
+        ["Bea Bundle", "Mailing List Co", "Theo Tester"]
+    );
+    select(&mut app, "Theo Tester");
+    assert_shows(
+        &detail(&screen_of_width(&app, 200)),
+        &["theo@example.org", "every contact ends up in one file."],
+    );
+}
+
+#[test]
+fn o_recreates_a_deleted_bundle_with_the_edit_and_the_other_cards_as_loaded() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("bundle-deleted", &[&cy, &bob, &dee]);
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    fs::remove_file(&path).unwrap();
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Deleted));
+
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        [cy, bob.replace("Bob", "Rob"), dee].concat()
+    );
 }
