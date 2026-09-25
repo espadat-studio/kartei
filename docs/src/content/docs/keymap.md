@@ -31,17 +31,17 @@ Typing filters the list live. The match is a case-insensitive substring of the d
 
 ## Edit
 
-| Key                    | Action                               |
-| ---------------------- | ------------------------------------ |
-| `Tab` / `Down`         | Next field                           |
-| `Shift-Tab` / `Up`     | Previous field                       |
-| `Left` / `Right`       | Move cursor                          |
-| `Backspace` / `Delete` | Delete before / after cursor         |
-| `Alt-a`                | Add a value (phone, email, address)  |
-| `Alt-d`                | Remove the focused value             |
-| `Alt-l`                | Cycle label: home, work, cell, other |
-| `Ctrl-s`               | Save                                 |
-| `Esc`                  | Cancel (asks first if changed)       |
+| Key                    | Action                                                |
+| ---------------------- | ----------------------------------------------------- |
+| `Tab` / `Down`         | Next field                                            |
+| `Shift-Tab` / `Up`     | Previous field                                        |
+| `Left` / `Right`       | Move cursor                                           |
+| `Backspace` / `Delete` | Delete before / after cursor                          |
+| `Alt-a`                | Add a value (phone, email, URL, address)              |
+| `Alt-d`                | Remove the focused value                              |
+| `Alt-l`                | Cycle label: home, work, cell, other (URLs skip cell) |
+| `Ctrl-s`               | Save                                                  |
+| `Esc`                  | Cancel (asks first if changed)                        |
 
 In the note and street fields, `Enter` inserts a newline. Birthdays are typed as `YYYY-MM-DD`, or `--MM-DD` without a year. A birthday kartei cannot read stays read-only.
 
