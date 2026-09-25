@@ -60,21 +60,30 @@ pub fn load(path: &Path) -> io::Result<AddressBook> {
     for path in paths {
         let bytes = fs::read(&path)?;
         let chunks: Vec<Vec<u8>> = split(&bytes).into_iter().map(<[u8]>::to_vec).collect();
-        let is_bundle = chunks.len() > 1;
-        for (index, chunk) in chunks.iter().enumerate() {
-            match Card::parse(chunk) {
-                Ok(card) => book.cards.push(((path.clone(), index), card)),
-                Err(defect) => book.skipped.push(Skipped {
-                    path: path.clone(),
-                    position: is_bundle.then_some(index + 1),
-                    defect,
-                }),
-            }
-        }
+        let (cards, skipped) = parse(&path, &chunks);
+        book.cards.extend(cards);
+        book.skipped.extend(skipped);
         book.files.insert(path, chunks);
     }
     book.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(book)
+}
+
+pub fn parse(path: &Path, chunks: &[Vec<u8>]) -> (Vec<(Location, Card)>, Vec<Skipped>) {
+    let is_bundle = chunks.len() > 1;
+    let mut cards = Vec::new();
+    let mut skipped = Vec::new();
+    for (index, chunk) in chunks.iter().enumerate() {
+        match Card::parse(chunk) {
+            Ok(card) => cards.push(((path.to_owned(), index), card)),
+            Err(defect) => skipped.push(Skipped {
+                path: path.to_owned(),
+                position: is_bundle.then_some(index + 1),
+                defect,
+            }),
+        }
+    }
+    (cards, skipped)
 }
 
 fn is_vcf(path: &Path) -> bool {
@@ -115,7 +124,9 @@ pub fn split(bytes: &[u8]) -> Vec<&[u8]> {
         }
         offset += line.len();
     }
-    chunks.push(&bytes[start..]);
+    if start < bytes.len() {
+        chunks.push(&bytes[start..]);
+    }
     chunks
 }
 
@@ -131,6 +142,11 @@ pub fn save(path: &Path, bytes: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+pub fn remove(path: &Path) -> io::Result<()> {
+    fs::remove_file(path)?;
+    File::open(path.parent().expect("card path is inside the address book"))?.sync_all()
 }
 
 fn write_synced(temp: &Path, bytes: &[u8], original: &Path) -> io::Result<()> {

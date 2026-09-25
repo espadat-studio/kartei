@@ -515,13 +515,20 @@ fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
         ("!", "list skipped cards"),
         ("?", "show keys"),
         ("q", "quit"),
+        ("d", "delete card"),
+        ("y", "delete card"),
         ("Backspace", "delete"),
         ("Enter", "keep filter"),
         ("Esc", "clear filter"),
         ("any key", "close"),
     ] {
-        let row = &screen[row_of(&screen, action)];
-        assert!(row.contains(key), "{key:?} not beside {action:?}: {row}");
+        assert!(
+            screen
+                .iter()
+                .any(|row| row.contains(action) && row.contains(key)),
+            "{key:?} not beside {action:?}:\n{}",
+            screen.join("\n")
+        );
     }
 
     press(&mut app, KeyCode::Char('q'));
@@ -1625,4 +1632,213 @@ fn o_appends_the_new_card_to_the_file_as_loaded() {
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.starts_with(&original), "{text}");
     assert!(text[original.len()..].contains("FN:Ann Lee\r\n"), "{text}");
+}
+
+fn delete(app: &mut App, name: &str) {
+    select(app, name);
+    press(app, KeyCode::Char('d'));
+    press(app, KeyCode::Char('y'));
+}
+
+#[test]
+fn d_asks_before_deleting_and_y_removes_a_single_card_file() {
+    let mut app = open("delete-single");
+    let dir = std::env::temp_dir().join(format!("kartei-delete-single-{}", std::process::id()));
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('d'));
+    assert_eq!(app.mode(), Mode::Delete);
+    assert!(
+        screen(&app)
+            .last()
+            .unwrap()
+            .contains("Delete Bob Brown? y/n")
+    );
+
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(!dir.join("bob.vcf").exists());
+    assert_eq!(listed(&app), ["ACME Plumbing", "Anna Adams", "Zed Adams"]);
+}
+
+#[test]
+fn any_key_but_y_cancels_a_delete_and_writes_nothing() {
+    let mut app = open("delete-cancel");
+    let dir = std::env::temp_dir().join(format!("kartei-delete-cancel-{}", std::process::id()));
+    let before = snapshot(&dir);
+    for key in [KeyCode::Char('n'), KeyCode::Esc, KeyCode::Char('d')] {
+        select(&mut app, "Bob Brown");
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, key);
+        assert_eq!(app.mode(), Mode::Browse);
+    }
+    assert_eq!(snapshot(&dir), before);
+    assert_eq!(listed(&app).len(), 4);
+}
+
+#[test]
+fn deleting_a_bundle_card_keeps_its_neighbours_byte_identical() {
+    let [cy, bob, dee] = bundle();
+    let preamble = "\r\n";
+    let (path, mut app) = open_bundle("delete-bundle", &[preamble, &cy, &bob, &dee]);
+    delete(&mut app, "Bob Brown");
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        [preamble, &cy, &dee].concat()
+    );
+    delete(&mut app, "Cy Cole");
+    assert_eq!(fs::read_to_string(&path).unwrap(), dee);
+    assert_eq!(listed(&app), ["Anna Adams", "Dee Diaz"]);
+    select(&mut app, "Dee Diaz");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Dee", "Dora");
+    save(&mut app);
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        dee.replace("Dee", "Dora")
+    );
+}
+
+#[test]
+fn deleting_the_last_card_of_a_directory_file_removes_it_unless_a_defect_remains() {
+    let [cy, bob, _] = bundle();
+    let broken = "BEGIN:VCARD\r\nFN:Broken\r\n";
+    let dir = address_book(
+        "delete-last",
+        &[
+            ("bundle.vcf", &[cy.as_str(), &bob].concat()),
+            ("kept.vcf", &[bob.as_str(), broken].concat()),
+            ("anna.vcf", ANNA),
+        ],
+    );
+    let (path, kept) = (dir.join("bundle.vcf"), dir.join("kept.vcf"));
+    let mut app = App::new(vdir::load(&dir).unwrap());
+
+    delete(&mut app, "Cy Cole");
+    delete(&mut app, "Bob Brown");
+    delete(&mut app, "Bob Brown");
+    assert!(!path.exists());
+    assert_eq!(fs::read_to_string(&kept).unwrap(), broken);
+    assert_eq!(listed(&app), ["Anna Adams"]);
+    assert_eq!(app.skipped().len(), 1);
+}
+
+#[test]
+fn deleting_the_last_card_of_a_single_file_address_book_keeps_it_empty() {
+    let [cy, ..] = bundle();
+    let (path, mut app) = open_file("delete-file", &cy);
+    delete(&mut app, "Cy Cole");
+    assert_eq!(fs::read(&path).unwrap(), b"");
+    assert!(listed(&app).is_empty());
+
+    press(&mut app, KeyCode::Char('R'));
+    assert!(app.skipped().is_empty());
+    add_ann_lee(&mut app);
+    assert_eq!(listed(&app), ["Ann Lee"]);
+}
+
+#[test]
+fn after_a_delete_the_next_card_is_selected_or_the_previous_at_the_end() {
+    let mut app = open("delete-selection");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "adams");
+    press(&mut app, KeyCode::Enter);
+    delete(&mut app, "Anna Adams");
+    assert_eq!(app.query(), "adams");
+    assert_eq!(listed(&app), ["Zed Adams"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Zed Adams");
+
+    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Esc);
+    delete(&mut app, "Bob Brown");
+    assert_eq!(app.selected_card().unwrap().display_name(), "Zed Adams");
+}
+
+fn delete_after_change_on_disk(path: &Path, app: &mut App, name: &str, external: &str) {
+    select(app, name);
+    fs::write(path, external).unwrap();
+    press(app, KeyCode::Char('d'));
+    press(app, KeyCode::Char('y'));
+}
+
+#[test]
+fn deleting_a_changed_single_card_file_prompts_and_o_deletes_it() {
+    let dir = address_book("delete-conflict", &[("anna.vcf", ANNA)]);
+    let path = dir.join("anna.vcf");
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    delete_after_change_on_disk(&path, &mut app, "Anna Adams", EXTERNAL);
+    assert_eq!(app.mode(), Mode::DeleteConflict { is_bundle: false });
+    assert_shows(
+        screen(&app).last().unwrap(),
+        &[
+            "changed on disk",
+            "r reload",
+            "o delete anyway",
+            "Esc cancel",
+        ],
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), EXTERNAL);
+
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert!(!path.exists());
+    assert!(listed(&app).is_empty());
+}
+
+#[test]
+fn r_reloads_instead_of_deleting_a_changed_file() {
+    let dir = address_book("delete-conflict-reload", &[("anna.vcf", ANNA)]);
+    let path = dir.join("anna.vcf");
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    delete_after_change_on_disk(&path, &mut app, "Anna Adams", EXTERNAL);
+    press(&mut app, KeyCode::Char('r'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(listed(&app), ["Anne Adams"]);
+    assert_eq!(fs::read_to_string(&path).unwrap(), EXTERNAL);
+}
+
+#[test]
+fn deleting_from_a_changed_bundle_prompts_and_o_is_refused() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("delete-bundle-conflict", &[&cy, &bob, &dee]);
+    let external = [cy, dee.replace("Dee", "Dora")].concat();
+    delete_after_change_on_disk(&path, &mut app, "Bob Brown", &external);
+    assert_eq!(app.mode(), Mode::DeleteConflict { is_bundle: true });
+    let hints = screen(&app).last().unwrap().clone();
+    assert_shows(&hints, &["changed on disk", "r reload", "Esc cancel"]);
+    assert!(!hints.contains("o delete"), "{hints}");
+
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(app.mode(), Mode::DeleteConflict { is_bundle: true });
+    assert!(app.error().is_some());
+    assert_eq!(fs::read_to_string(&path).unwrap(), external);
+
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(fs::read_to_string(&path).unwrap(), external);
+}
+
+#[test]
+fn deleting_a_card_whose_file_is_gone_drops_it_with_a_status() {
+    let [cy, bob, dee] = bundle();
+    let (path, mut app) = open_bundle("delete-gone", &[&cy, &bob, &dee]);
+    select(&mut app, "Bob Brown");
+    fs::remove_file(&path).unwrap();
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(listed(&app), ["Anna Adams"]);
+    assert!(screen(&app).last().unwrap().contains("already deleted"));
+    assert!(!path.exists());
+}
+
+#[test]
+fn o_is_refused_when_a_single_card_file_became_a_bundle_on_disk() {
+    let dir = address_book("delete-grown", &[("anna.vcf", ANNA)]);
+    let path = dir.join("anna.vcf");
+    let mut app = App::new(vdir::load(&dir).unwrap());
+    let grown = [ANNA, EXTERNAL].concat();
+    delete_after_change_on_disk(&path, &mut app, "Anna Adams", &grown);
+    assert_eq!(app.mode(), Mode::DeleteConflict { is_bundle: true });
+    press(&mut app, KeyCode::Char('o'));
+    assert_eq!(fs::read_to_string(&path).unwrap(), grown);
 }

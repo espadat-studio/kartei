@@ -59,6 +59,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `/`                      | Search                      |
 | `e` / `Enter`            | Edit selected card          |
 | `n`                      | New card                    |
+| `d`                      | Delete selected card        |
 | `y`                      | Copy a value (if any)       |
 | `R`                      | Reload all from disk        |
 | `!`                      | List skipped cards (if any) |
@@ -108,6 +109,20 @@ Shown when a save finds the file changed or deleted on disk.
 | `r`   | Reload from disk, drop your edit       |
 | `o`   | Overwrite (or recreate) with your edit |
 | `Esc` | Keep editing                           |
+
+### Delete
+
+`d` asks "Delete <name>? y/n". `y` deletes the card for good; any other key cancels. A card alone in its file removes the file. A card in a bundle drops only its own lines; the file is removed once no card is left, unless a skipped card remains. A `.vcf` file given as the address book is kept, even empty.
+
+If the file changed on disk since it was loaded:
+
+| Key   | Action                                 |
+| ----- | -------------------------------------- |
+| `r`   | Reload from disk, delete nothing       |
+| `o`   | Delete anyway (single-card files only) |
+| `Esc` | Cancel                                 |
+
+In a changed bundle, `o` is refused: reload first. A card whose file is already gone is dropped from the list.
 
 ### Copy
 
