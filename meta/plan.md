@@ -63,6 +63,8 @@ None.
 
 ## Commits
 
+Superseded by vertical-slice tickets under spec #8: #9 browse -> #10 search/help, #11 details, #12 skipped -> #13 edit single-value (after #11) -> #14 conflicts, #15 phones/emails, #16 bday/adr, #17 new cards; #18 copy (after #11); #19 docs (after all). List below kept as layer reference.
+
 Phase 1 card (pure)
 1. `feat(card): parse and write content lines losslessly` - line.rs unfold/parse, raw bytes kept; card/mod.rs Card; fixtures folded-photo, lf-endings, utf8-fold-midchar. Tests: fixture byte identity; proptest `write(parse(x)) == x`.
 2. `feat(card): fold and escape edited values` - line.rs fold 75 octets, escape/unescape. Tests: proptest fold <=75 + UTF-8 safe; escape round-trip units.
