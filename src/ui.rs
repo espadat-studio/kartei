@@ -89,7 +89,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
     match app.form() {
         Some(form) => draw_form(frame, form, detail),
         None => {
-            let lines = app.selected_card().map(details).unwrap_or_default();
+            let lines = app
+                .selected_card()
+                .map_or_else(|| empty(app.query()), details);
             frame.render_widget(Paragraph::new(lines).block(Block::bordered()), detail);
         }
     }
@@ -254,6 +256,17 @@ fn skipped_count(count: usize) -> Option<String> {
         1 => Some("1 card skipped (! list) ".into()),
         n => Some(format!("{n} cards skipped (! list) ")),
     }
+}
+
+fn empty(query: &str) -> Vec<Line<'static>> {
+    let (message, hint) = match query {
+        "" => ("No .vcf cards here".to_owned(), "n new card  q quit"),
+        query => (format!("No cards match /{query}"), "Esc clear search"),
+    };
+    vec![
+        Line::styled(message, Modifier::BOLD),
+        Line::styled(hint, Modifier::DIM),
+    ]
 }
 
 fn details(card: &Card) -> Vec<Line<'static>> {

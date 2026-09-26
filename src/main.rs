@@ -11,7 +11,15 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 
 fn main() -> ExitCode {
-    let Some(path) = env::args_os().nth(1).or_else(|| env::var_os("KARTEI_DIR")) else {
+    let arg = env::args_os().nth(1);
+    if arg
+        .as_ref()
+        .is_some_and(|arg| arg == "--version" || arg == "-V")
+    {
+        println!("kartei {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+    let Some(path) = arg.or_else(|| env::var_os("KARTEI_DIR")) else {
         eprintln!("usage: kartei <dir-or-file.vcf> (or set KARTEI_DIR)");
         return ExitCode::FAILURE;
     };

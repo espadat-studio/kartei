@@ -36,7 +36,7 @@ kartei ~/.local/share/contacts
 
 Or pass a single `.vcf` file, such as a Thunderbird Bundle: `kartei Contacts.vcf`. New Cards go after the file's last Card, with its line endings. In a directory, each new Card gets its own `<uid>.vcf`. See [Edit Thunderbird contacts](https://kartei.espadat.com/getting-started/#edit-thunderbird-contacts) for the export and import round trip.
 
-Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1.
+Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1. `kartei --version` (or `-V`) prints the version.
 
 In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing.
 

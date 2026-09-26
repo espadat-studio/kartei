@@ -50,3 +50,15 @@ fn a_file_path_that_is_not_vcf_is_rejected_from_kartei_dir_too() {
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("not a directory or .vcf file"));
 }
+
+#[test]
+fn version_flag_prints_name_and_version_to_stdout() {
+    for flag in ["--version", "-V"] {
+        let output = kartei().arg(flag).output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            concat!("kartei ", env!("CARGO_PKG_VERSION"), "\n")
+        );
+    }
+}
