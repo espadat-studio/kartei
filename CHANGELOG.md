@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0](https://github.com/espadat-studio/kartei/compare/v1.0.0...v2.0.0) - 2026-09-26
+
+### Added
+
+- defer reloads during edits and follow removed cards ([#64](https://github.com/espadat-studio/kartei/pull/64))
+- [**breaking**] complete addresses with kartei query ([#63](https://github.com/espadat-studio/kartei/pull/63))
+- reload the address book when files change ([#62](https://github.com/espadat-studio/kartei/pull/62))
+- rank fuzzy search results ([#61](https://github.com/espadat-studio/kartei/pull/61))
+- parse the command line with clap ([#60](https://github.com/espadat-studio/kartei/pull/60))
+- show an empty state and add --version ([#51](https://github.com/espadat-studio/kartei/pull/51))
+
+### Other
+
+- record edit-interrupt prompt as out of scope ([#65](https://github.com/espadat-studio/kartei/pull/65))
+- sort cargo dependencies
+- *(docs)* bump the docs theme to v0.4.0
+- drop pre-release notices for 1.0.0
+- release v1.0.0 ([#38](https://github.com/espadat-studio/kartei/pull/38))
+
 ### Changed
 
 - `query` is a reserved word: `kartei query` completes addresses, so open a directory named `query` as `./query`
