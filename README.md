@@ -38,7 +38,7 @@ Or pass a single `.vcf` file, such as a Thunderbird Bundle: `kartei Contacts.vcf
 
 Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage, so open a directory named `help` as `./help`; `kartei --version` (or `-V`) prints the version.
 
-In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing.
+In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing. Changes a sync pulls in while kartei is open show up on their own.
 
 A `.vcf` holding several Cards (a Thunderbird export) lists each one; saving rewrites only the edited Card's lines. A Card that is not valid vCard is skipped at load, the rest of its file still loads. The status bar counts skipped Cards; `!` lists each file, the position of the Card inside a Bundle (`Contacts.vcf #4`), and the reason.
 
@@ -66,6 +66,8 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `!`                      | List skipped cards (if any) |
 | `?`                      | Help                        |
 | `q`                      | Quit                        |
+
+kartei watches the address book. When a `.vcf` file changes on disk while you browse, search, read help or the skipped list, it reloads at once, keeps your selection and filter, and says `reloaded`. Its own writes don't count. `R` still reloads on demand.
 
 ### Search
 

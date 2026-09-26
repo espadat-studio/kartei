@@ -86,7 +86,7 @@ pub fn parse(path: &Path, chunks: &[Vec<u8>]) -> (Vec<(Location, Card)>, Vec<Ski
     (cards, skipped)
 }
 
-fn is_vcf(path: &Path) -> bool {
+pub(crate) fn is_vcf(path: &Path) -> bool {
     path.extension().is_some_and(|ext| ext == "vcf")
 }
 

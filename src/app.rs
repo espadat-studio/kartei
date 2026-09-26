@@ -444,16 +444,35 @@ impl App {
         self.files.insert(path.clone(), chunks);
     }
 
-    fn reload(&mut self, location: Option<Location>) {
+    pub fn disk_changed(&mut self) {
+        if !matches!(
+            self.mode,
+            Mode::Browse | Mode::Search | Mode::Help | Mode::Prompt
+        ) {
+            return;
+        }
         match vdir::load(&self.path) {
+            Ok(book) if is_unchanged(&book.files, &self.files) => {}
             Ok(book) => {
-                self.cards = book.cards;
-                self.files = book.files;
-                self.skipped = book.skipped;
-                self.show(location.as_ref());
+                self.replace(book, self.selected_location());
+                self.status = Some("reloaded");
             }
             Err(err) => self.error = Some(format!("reload failed: {err}")),
         }
+    }
+
+    fn reload(&mut self, location: Option<Location>) {
+        match vdir::load(&self.path) {
+            Ok(book) => self.replace(book, location),
+            Err(err) => self.error = Some(format!("reload failed: {err}")),
+        }
+    }
+
+    fn replace(&mut self, book: AddressBook, location: Option<Location>) {
+        self.cards = book.cards;
+        self.files = book.files;
+        self.skipped = book.skipped;
+        self.show(location.as_ref());
     }
 
     fn show(&mut self, location: Option<&Location>) {
@@ -563,6 +582,18 @@ fn check_raw(bytes: &[u8]) -> Result<(), &'static str> {
         return Err("more than one card");
     }
     Card::parse(bytes).map(drop).map_err(Defect::reason)
+}
+
+fn is_unchanged(
+    disk: &HashMap<PathBuf, Vec<Vec<u8>>>,
+    loaded: &HashMap<PathBuf, Vec<Vec<u8>>>,
+) -> bool {
+    disk.len() == loaded.len()
+        && disk.iter().all(|(path, chunks)| {
+            loaded
+                .get(path)
+                .is_some_and(|l| l.concat() == chunks.concat())
+        })
 }
 
 fn sort_key(card: &Card) -> (String, String, String) {

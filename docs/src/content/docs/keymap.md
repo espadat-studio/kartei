@@ -21,6 +21,8 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `?`                      | Help                        |
 | `q`                      | Quit                        |
 
+kartei watches the address book. When a `.vcf` file changes on disk while you browse, search, read help or the skipped list, it reloads at once, keeps your selection and filter, and says `reloaded`. Its own writes don't count. `R` still reloads on demand.
+
 ## Search
 
 Typing filters the list live with a case-insensitive fuzzy match on display name, company, department and email, so `jhn smth` finds John Smith. Best matches come first and the top one is selected; ties keep the usual order. A query of digits also matches phone numbers as a substring, ignoring spaces, `+`, `-` and parentheses, and those hits come after fuzzy ones.
