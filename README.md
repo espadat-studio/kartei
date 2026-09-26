@@ -69,7 +69,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 
 ### Search
 
-Typing filters live on display name, company, department, email or phone digits.
+Typing filters live with a fuzzy match on display name, company, department and email (`jhn smth` finds John Smith), best matches first. Digits also match phone numbers as a substring, ranked after fuzzy hits.
 
 | Key         | Action                    |
 | ----------- | ------------------------- |

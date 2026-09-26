@@ -23,7 +23,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 
 ## Search
 
-Typing filters the list live. The match is a case-insensitive substring of the display name, company, department, email or phone digits.
+Typing filters the list live with a case-insensitive fuzzy match on display name, company, department and email, so `jhn smth` finds John Smith. Best matches come first and the top one is selected; ties keep the usual order. A query of digits also matches phone numbers as a substring, ignoring spaces, `+`, `-` and parentheses, and those hits come after fuzzy ones.
 
 | Key         | Action                    |
 | ----------- | ------------------------- |
