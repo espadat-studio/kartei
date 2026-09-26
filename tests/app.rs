@@ -2293,3 +2293,168 @@ fn a_search_without_matches_says_so() {
     press(&mut app, KeyCode::Char('q'));
     assert_shows(&detail(&screen(&app)), &["No cards match /xq", "Esc clear"]);
 }
+
+fn watch_book(test: &str) -> (PathBuf, App) {
+    let dir = address_book(
+        test,
+        &[
+            ("anna.vcf", ANNA),
+            ("bob.vcf", &card("Brown;Bob;;;", "Bob Brown", "1", "b@b")),
+            ("zed.vcf", &card("Adams;Zed;;;", "Zed Adams", "1", "z@z")),
+        ],
+    );
+    let app = App::new(vdir::load(&dir).unwrap());
+    (dir, app)
+}
+
+fn add_cy_on_disk(dir: &Path) {
+    fs::write(
+        dir.join("cy.vcf"),
+        card("Cole;Cy;;;", "Cy Cole", "1", "c@c"),
+    )
+    .unwrap();
+}
+
+type Setup = fn(&mut App, &Path);
+
+#[test]
+fn a_change_on_disk_waits_in_the_form_and_every_prompt() {
+    let setups: [(&str, Setup); 8] = [
+        ("defer-edit", |app, _| press(app, KeyCode::Char('e'))),
+        ("defer-discard", |app, _| {
+            press(app, KeyCode::Char('e'));
+            replace_given_name(app, "Bob", "Rob");
+            press(app, KeyCode::Esc);
+        }),
+        ("defer-conflict", |app, dir| {
+            press(app, KeyCode::Char('e'));
+            replace_given_name(app, "Bob", "Rob");
+            fs::write(dir.join("bob.vcf"), EXTERNAL).unwrap();
+            save(app);
+        }),
+        ("defer-copy", |app, _| press(app, KeyCode::Char('y'))),
+        ("defer-delete", |app, _| press(app, KeyCode::Char('d'))),
+        ("defer-delete-conflict", |app, dir| {
+            fs::write(dir.join("bob.vcf"), EXTERNAL).unwrap();
+            press(app, KeyCode::Char('d'));
+            press(app, KeyCode::Char('y'));
+        }),
+        ("defer-invalid", |app, _| {
+            press(app, KeyCode::Char('E'));
+            app.take_editor_request().unwrap();
+            app.finish_raw_edit(Ok(b"BEGIN:VCARD\r\nFN:x\r\n".to_vec()));
+        }),
+        ("defer-raw", |app, _| {
+            press(app, KeyCode::Char('E'));
+            app.take_editor_request().unwrap();
+        }),
+    ];
+    for (test, setup) in setups {
+        let (dir, mut app) = watch_book(test);
+        select(&mut app, "Bob Brown");
+        setup(&mut app, &dir);
+        let mode = app.mode();
+        let before = screen(&app);
+        add_cy_on_disk(&dir);
+
+        app.disk_changed();
+        assert_eq!(app.mode(), mode, "{test}");
+        assert_eq!(screen(&app), before, "{test}");
+        assert_eq!(
+            listed(&app),
+            ["Anna Adams", "Zed Adams", "Bob Brown"],
+            "{test}"
+        );
+    }
+}
+
+#[test]
+fn returning_to_browse_runs_the_deferred_reload() {
+    let (dir, mut app) = watch_book("defer-return");
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    add_cy_on_disk(&dir);
+    app.disk_changed();
+
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Zed Adams", "Bob Brown", "Cy Cole"]
+    );
+    assert_eq!(app.selected_card().unwrap().display_name(), "Bob Brown");
+    assert_eq!(app.status(), Some("reloaded"));
+}
+
+#[test]
+fn a_finished_raw_edit_runs_the_deferred_reload() {
+    let (dir, mut app) = watch_book("defer-raw-return");
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('E'));
+    let bytes = app.take_editor_request().unwrap();
+    add_cy_on_disk(&dir);
+    app.disk_changed();
+
+    app.finish_raw_edit(Ok(bytes));
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Zed Adams", "Bob Brown", "Cy Cole"]
+    );
+    assert_eq!(app.status(), Some("reloaded"));
+}
+
+#[test]
+fn saving_the_form_after_a_deferred_change_to_its_file_prompts() {
+    let (dir, mut app) = watch_book("defer-save");
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    fs::write(dir.join("bob.vcf"), EXTERNAL).unwrap();
+    app.disk_changed();
+
+    save(&mut app);
+    assert_eq!(app.mode(), Mode::Conflict(Conflict::Changed));
+}
+
+#[test]
+fn a_reload_removing_the_selected_card_selects_the_next_and_keeps_the_filter() {
+    let (dir, mut app) = watch_book("follow-next");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "adams");
+    press(&mut app, KeyCode::Enter);
+    select(&mut app, "Anna Adams");
+    fs::remove_file(dir.join("anna.vcf")).unwrap();
+
+    app.disk_changed();
+    assert_eq!(app.query(), "adams");
+    assert_eq!(listed(&app), ["Zed Adams"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Zed Adams");
+    assert_eq!(app.status(), Some("Anna Adams removed on disk"));
+}
+
+#[test]
+fn a_reload_removing_the_last_card_selects_the_previous() {
+    let (dir, mut app) = watch_book("follow-previous");
+    select(&mut app, "Bob Brown");
+    fs::remove_file(dir.join("bob.vcf")).unwrap();
+
+    app.disk_changed();
+    assert_eq!(listed(&app), ["Anna Adams", "Zed Adams"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Zed Adams");
+    assert_eq!(app.status(), Some("Bob Brown removed on disk"));
+}
+
+#[test]
+fn the_deferred_reload_keeps_the_status_of_the_key_that_ran_it() {
+    let (dir, mut app) = watch_book("defer-copied");
+    press(&mut app, KeyCode::Char('y'));
+    add_cy_on_disk(&dir);
+    app.disk_changed();
+
+    press(&mut app, KeyCode::Char('1'));
+    assert_eq!(app.status(), Some("copied"));
+    assert_eq!(
+        listed(&app),
+        ["Anna Adams", "Zed Adams", "Bob Brown", "Cy Cole"]
+    );
+}
