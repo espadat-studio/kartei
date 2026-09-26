@@ -2045,3 +2045,21 @@ fn a_raw_edit_that_fails_to_save_shows_the_error_with_the_prompt() {
     press(&mut app, KeyCode::Char('e'));
     assert_eq!(app.take_editor_request(), Some(hanna.into_bytes()));
 }
+
+#[test]
+fn an_empty_address_book_says_so() {
+    let app = App::new(vdir::load(&address_book("empty-state", &[])).unwrap());
+    assert_shows(
+        &detail(&screen(&app)),
+        &["No .vcf cards here", "n new card"],
+    );
+}
+
+#[test]
+fn a_search_without_matches_says_so() {
+    let mut app = open("no-match");
+    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Char('x'));
+    press(&mut app, KeyCode::Char('q'));
+    assert_shows(&detail(&screen(&app)), &["No cards match /xq", "Esc clear"]);
+}
