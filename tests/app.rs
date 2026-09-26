@@ -498,6 +498,119 @@ fn search_matches_company_email_and_phone_digits() {
     }
 }
 
+fn fuzzy_book(test: &str) -> App {
+    let dir = address_book(
+        test,
+        &[
+            (
+                "anna.vcf",
+                &card(
+                    "Jahnke;Anna;;;",
+                    "Anna Jahnke",
+                    "+1 555 0100",
+                    "anna.jahnke@smithson.test",
+                ),
+            ),
+            (
+                "john.vcf",
+                &card(
+                    "Smith;John;;;",
+                    "John Smith",
+                    "+1 555 0200",
+                    "john.170@smith.test",
+                ),
+            ),
+            (
+                "zed.vcf",
+                &card(
+                    "Adams;Zed;;;",
+                    "Zed Adams",
+                    "+49 170 1234567",
+                    "zed@team.test",
+                ),
+            ),
+            (
+                "amy.vcf",
+                &card("Brown;Amy;;;", "Amy Brown", "+1 555 0004", "amy@team.test"),
+            ),
+        ],
+    );
+    App::new(vdir::load(&dir).unwrap())
+}
+
+const SORTED: [&str; 4] = ["Zed Adams", "Amy Brown", "Anna Jahnke", "John Smith"];
+
+#[test]
+fn an_abbreviated_query_ranks_the_strongest_match_first() {
+    let mut app = fuzzy_book("fuzzy-rank");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "jhn smth");
+    assert_eq!(listed(&app), ["John Smith", "Anna Jahnke"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "John Smith");
+}
+
+#[test]
+fn fzf_operators_are_matched_literally() {
+    let mut app = fuzzy_book("fuzzy-literal");
+    for query in ["!zzz", "^smith", "'zed"] {
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, query);
+        assert!(listed(&app).is_empty(), "{query:?}");
+        press(&mut app, KeyCode::Esc);
+    }
+}
+
+#[test]
+fn equal_scores_keep_structured_name_order() {
+    let mut app = fuzzy_book("fuzzy-ties");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "TEAM");
+    assert_eq!(listed(&app), ["Zed Adams", "Amy Brown"]);
+}
+
+#[test]
+fn clearing_the_query_restores_the_sorted_list() {
+    let mut app = fuzzy_book("fuzzy-clear");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "jhn smth");
+    for _ in "jhn smth".chars() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    assert_eq!(listed(&app), SORTED);
+}
+
+#[test]
+fn phone_digits_match_as_a_substring_below_fuzzy_hits() {
+    let mut app = fuzzy_book("fuzzy-phone");
+    for (query, expected) in [
+        ("1701234", &["Zed Adams"][..]),
+        ("+49 1701", &["Zed Adams"]),
+        ("170", &["John Smith", "Zed Adams"]),
+    ] {
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, query);
+        assert_eq!(listed(&app), expected, "{query:?}");
+        press(&mut app, KeyCode::Esc);
+    }
+}
+
+#[test]
+fn the_ranked_filter_is_kept_after_a_reload_and_a_save() {
+    let mut app = fuzzy_book("fuzzy-kept");
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "jhn smth");
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('R'));
+    assert_eq!(listed(&app), ["John Smith", "Anna Jahnke"]);
+
+    select(&mut app, "Anna Jahnke");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Anna", "Hanna");
+    save(&mut app);
+    assert_eq!(listed(&app), ["John Smith", "Hanna Jahnke"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Hanna Jahnke");
+}
+
 #[test]
 fn question_mark_shows_the_keymap_and_any_key_dismisses_it() {
     let mut app = search_book("help");

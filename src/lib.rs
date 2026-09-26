@@ -4,5 +4,6 @@ pub mod editor;
 pub mod form;
 pub mod input;
 pub mod osc52;
+pub mod search;
 pub mod ui;
 pub mod vdir;
