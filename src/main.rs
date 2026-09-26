@@ -2,14 +2,18 @@ use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
 
 use clap::Parser;
 use kartei::app::App;
-use kartei::{editor, ui, vdir};
+use kartei::{editor, ui, vdir, watch};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
+
+const TICK: Duration = Duration::from_millis(100);
 
 #[derive(Parser)]
 #[command(version, about, arg_required_else_help = true)]
@@ -32,8 +36,16 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let (changes, changed) = mpsc::channel();
+    let _watcher = match watch::watch(&book.path, changes) {
+        Ok(watcher) => watcher,
+        Err(err) => {
+            eprintln!("kartei: {}: watch failed: {err}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
 
-    let result = run(&mut ratatui::init(), App::new(book));
+    let result = run(&mut ratatui::init(), App::new(book), &changed);
     ratatui::restore();
     if let Err(err) = result {
         eprintln!("kartei: {err}");
@@ -42,14 +54,10 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run(terminal: &mut DefaultTerminal, mut app: App) -> io::Result<()> {
+fn run(terminal: &mut DefaultTerminal, mut app: App, changed: &Receiver<()>) -> io::Result<()> {
     while !app.should_quit() {
         terminal.draw(|frame| ui::draw(frame, &app))?;
-        if let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.handle_key(key);
-        }
+        handle_next_event(&mut app, changed)?;
         if let Some(sequence) = app.take_clipboard() {
             terminal.backend_mut().write_all(sequence.as_bytes())?;
             terminal.backend_mut().flush()?;
@@ -64,4 +72,21 @@ fn run(terminal: &mut DefaultTerminal, mut app: App) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn handle_next_event(app: &mut App, changed: &Receiver<()>) -> io::Result<()> {
+    loop {
+        if event::poll(TICK)? {
+            if let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                app.handle_key(key);
+            }
+            return Ok(());
+        }
+        if changed.try_iter().count() > 0 {
+            app.disk_changed();
+            return Ok(());
+        }
+    }
 }
