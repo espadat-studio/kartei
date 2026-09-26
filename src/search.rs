@@ -65,3 +65,12 @@ fn has_phone(card: &Card, digits: &str) -> bool {
         phone.contains(digits)
     })
 }
+
+pub fn sort_key(card: &Card) -> (String, String, String) {
+    let (family, given) = card.structured_name();
+    let display_name = card.display_name().to_lowercase();
+    if family.is_empty() && given.is_empty() {
+        return (display_name, String::new(), String::new());
+    }
+    (family.to_lowercase(), given.to_lowercase(), display_name)
+}

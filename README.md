@@ -36,11 +36,28 @@ kartei ~/.local/share/contacts
 
 Or pass a single `.vcf` file, such as a Thunderbird Bundle: `kartei Contacts.vcf`. New Cards go after the file's last Card, with its line endings. In a directory, each new Card gets its own `<uid>.vcf`. See [Edit Thunderbird contacts](https://kartei.espadat.com/getting-started/#edit-thunderbird-contacts) for the export and import round trip.
 
-Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage, so open a directory named `help` as `./help`; `kartei --version` (or `-V`) prints the version.
+Or set `KARTEI_DIR` once and run `kartei` alone. The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. A missing or unreadable path, or one that is neither a directory nor a `.vcf` file, prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage. `help` and `query` are commands, so open a directory with either name as `./help` or `./query`; `kartei --version` (or `-V`) prints the version.
 
 In the vdirsyncer `filesystem` storage, use `fileext = ".vcf"` and `collections = null` so one address book lands flat in `path`. Run `vdirsyncer sync` before and after editing. Changes a sync pulls in while kartei is open show up on their own.
 
 A `.vcf` holding several Cards (a Thunderbird export) lists each one; saving rewrites only the edited Card's lines. A Card that is not valid vCard is skipped at load, the rest of its file still loads. The status bar counts skipped Cards; `!` lists each file, the position of the Card inside a Bundle (`Contacts.vcf #4`), and the reason.
+
+## Complete addresses in aerc and mutt
+
+`kartei query <text>` prints the emails of Cards matching `<text>`, one per line as `email<TAB>Display name<TAB>Label`. It uses the same fuzzy matcher as `/`, best matches first, and prints every email of a matching Card. Cards without an email and skipped Cards are left out. The address book comes from `-d`/`--dir`, else `KARTEI_DIR`. Errors go to stderr with status 1.
+
+In aerc's `aerc.conf`:
+
+```ini
+[compose]
+address-book-cmd = kartei query "%s"
+```
+
+With no match, `query` prints nothing and exits with status 0. `--mutt` prints a header line first, as mutt expects, and exits with status 1 on no match. In `muttrc`:
+
+```text
+set query_command = "kartei query --mutt '%s'"
+```
 
 ## Lossless edits
 
@@ -71,7 +88,7 @@ kartei watches the address book. When a `.vcf` file changes on disk while you br
 
 ### Search
 
-Typing filters live with a fuzzy match on display name, company, department and email (`jhn smth` finds John Smith), best matches first. Digits also match phone numbers as a substring, ranked after fuzzy hits.
+Typing filters live with a fuzzy match on display name, company, department and email (`jhn smth` finds John Smith), best matches first. Digits also match phone numbers as a substring, ranked after fuzzy hits. `kartei query` matches the same way.
 
 | Key         | Action                    |
 | ----------- | ------------------------- |

@@ -41,7 +41,7 @@ kartei
 
 A single file, such as a Thunderbird export, works the same way: `kartei Contacts.vcf`. New contacts go after the file's last one, with its line endings. In a directory, each new contact gets its own `<uid>.vcf`.
 
-The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. With a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage, so open a directory named `help` as `./help`; `kartei --version` (or `-V`) prints the version.
+The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. With a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage. `help` and `query` are commands, so open a directory with either name as `./help` or `./query`; `kartei --version` (or `-V`) prints the version.
 
 ## Edit Thunderbird contacts
 
@@ -65,6 +65,23 @@ Import replaces **every** Card in the file, not only the ones you edited. A chan
 :::caution
 Dragging contacts between Thunderbird address books gives them new UIDs. A Bundle exported from one Thunderbird address book then no longer matches the contacts in the other. Importing it creates duplicates.
 :::
+
+## Complete addresses in aerc and mutt
+
+`kartei query <text>` prints the emails of Cards matching `<text>`, one per line as `email<TAB>Display name<TAB>Label`. It uses the same fuzzy matcher as `/`, best matches first, and prints every email of a matching Card. Cards without an email and skipped Cards are left out. The address book comes from `-d`/`--dir`, else `KARTEI_DIR`. Errors go to stderr with status 1.
+
+In aerc's `aerc.conf`:
+
+```ini
+[compose]
+address-book-cmd = kartei query "%s"
+```
+
+With no match, `query` prints nothing and exits with status 0. `--mutt` prints a header line first, as mutt expects, and exits with status 1 on no match. In `muttrc`:
+
+```text
+set query_command = "kartei query --mutt '%s'"
+```
 
 ## Sync with vdirsyncer
 
