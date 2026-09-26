@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::Parser;
 use kartei::app::App;
 use kartei::{editor, ui, vdir};
 use ratatui::DefaultTerminal;
@@ -10,20 +11,20 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 
+#[derive(Parser)]
+#[command(version, about, arg_required_else_help = true)]
+struct Cli {
+    /// Address book: a directory of .vcf files, or one .vcf file
+    #[arg(env = "KARTEI_DIR", value_name = "DIR_OR_FILE.VCF")]
+    path: PathBuf,
+}
+
 fn main() -> ExitCode {
-    let arg = env::args_os().nth(1);
-    if arg
-        .as_ref()
-        .is_some_and(|arg| arg == "--version" || arg == "-V")
-    {
-        println!("kartei {}", env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS;
+    let mut args: Vec<_> = env::args_os().collect();
+    if args.get(1).is_some_and(|arg| arg == "help") {
+        args[1] = "--help".into();
     }
-    let Some(path) = arg.or_else(|| env::var_os("KARTEI_DIR")) else {
-        eprintln!("usage: kartei <dir-or-file.vcf> (or set KARTEI_DIR)");
-        return ExitCode::FAILURE;
-    };
-    let path = PathBuf::from(path);
+    let path = Cli::parse_from(args).path;
     let book = match std::path::absolute(&path).and_then(|path| vdir::load(&path)) {
         Ok(book) => book,
         Err(err) => {

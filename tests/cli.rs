@@ -25,10 +25,42 @@ fn exits_1_on_a_path_that_is_neither_a_directory_nor_a_vcf_file() {
 }
 
 #[test]
-fn exits_1_without_argument_or_kartei_dir() {
+fn exits_2_with_help_on_stderr_without_argument_or_kartei_dir() {
     let output = kartei().output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Usage: kartei"), "{stderr}");
+    assert!(stderr.contains("KARTEI_DIR"), "{stderr}");
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn help_prints_usage_to_stdout() {
+    for arg in ["--help", "-h", "help"] {
+        let output = kartei().arg(arg).output().unwrap();
+        assert_eq!(output.status.code(), Some(0), "{arg}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("Usage: kartei"), "{arg}: {stdout}");
+        assert!(stdout.contains("KARTEI_DIR"), "{arg}: {stdout}");
+    }
+}
+
+#[test]
+fn exits_2_on_an_unknown_flag() {
+    let output = kartei().arg("--bogus").output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--bogus"));
+}
+
+#[test]
+fn argument_wins_over_kartei_dir() {
+    let output = kartei()
+        .env("KARTEI_DIR", "/nonexistent/from-env")
+        .arg("/nonexistent/from-arg")
+        .output()
+        .unwrap();
     assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("KARTEI_DIR"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("/nonexistent/from-arg"));
 }
 
 #[test]
