@@ -4,5 +4,5 @@ kartei watches the Address book and reloads it without asking while the user bro
 
 ## Considered Options
 
-- Interrupt the edit with a "file changed, reload?" prompt: rejected for now, it adds a second prompt path for a race the conflict check already catches. Tracked in #53.
+- Interrupt the edit with a "file changed, reload?" prompt: rejected, it adds a second prompt path for a race the conflict check already catches. See `.out-of-scope/edit-interrupt-on-disk-change.md` (#53).
 - Reload in place under the open form: rejected, the form's Card and chunk position would silently stop matching the disk.
