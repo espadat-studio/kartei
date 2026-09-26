@@ -25,7 +25,7 @@ kartei watches the address book. When a `.vcf` file changes on disk while you br
 
 ## Search
 
-Typing filters the list live with a case-insensitive fuzzy match on display name, company, department and email, so `jhn smth` finds John Smith. Best matches come first and the top one is selected; ties keep the usual order. A query of digits also matches phone numbers as a substring, ignoring spaces, `+`, `-` and parentheses, and those hits come after fuzzy ones.
+Typing filters the list live with a case-insensitive fuzzy match on display name, company, department and email, so `jhn smth` finds John Smith. Best matches come first and the top one is selected; ties keep the usual order. A query of digits also matches phone numbers as a substring, ignoring spaces, `+`, `-` and parentheses, and those hits come after fuzzy ones. [`kartei query`](/getting-started/#complete-addresses-in-aerc-and-mutt) matches the same way.
 
 | Key         | Action                    |
 | ----------- | ------------------------- |
