@@ -72,7 +72,7 @@ impl App {
             files,
             skipped,
         } = book;
-        cards.sort_by_cached_key(|(_, card)| sort_key(card));
+        cards.sort_by_cached_key(|(_, card)| search::sort_key(card));
         Self {
             path,
             visible: (0..cards.len()).collect(),
@@ -476,7 +476,8 @@ impl App {
     }
 
     fn show(&mut self, location: Option<&Location>) {
-        self.cards.sort_by_cached_key(|(_, card)| sort_key(card));
+        self.cards
+            .sort_by_cached_key(|(_, card)| search::sort_key(card));
         self.filter(
             location.and_then(|location| self.cards.iter().position(|(l, _)| l == location)),
         );
@@ -594,13 +595,4 @@ fn is_unchanged(
                 .get(path)
                 .is_some_and(|l| l.concat() == chunks.concat())
         })
-}
-
-fn sort_key(card: &Card) -> (String, String, String) {
-    let (family, given) = card.structured_name();
-    let display_name = card.display_name().to_lowercase();
-    if family.is_empty() && given.is_empty() {
-        return (display_name, String::new(), String::new());
-    }
-    (family.to_lowercase(), given.to_lowercase(), display_name)
 }
