@@ -59,8 +59,9 @@ pub struct App {
     raw: Option<RawEdit>,
     editor_request: Option<Vec<u8>>,
     error: Option<String>,
-    status: Option<&'static str>,
+    status: Option<String>,
     clipboard: Option<String>,
+    is_stale: bool,
     should_quit: bool,
 }
 
@@ -88,6 +89,7 @@ impl App {
             error: None,
             status: None,
             clipboard: None,
+            is_stale: false,
             should_quit: false,
         }
     }
@@ -106,6 +108,9 @@ impl App {
             Mode::DeleteConflict { is_bundle } => self.delete_conflict(key, is_bundle),
             Mode::Invalid(_) => self.invalid(key),
             Mode::Prompt | Mode::Help => self.mode = Mode::Browse,
+        }
+        if let Some(status) = self.settle() {
+            self.status.get_or_insert(status);
         }
     }
 
@@ -171,6 +176,13 @@ impl App {
     }
 
     pub fn finish_raw_edit(&mut self, output: io::Result<Vec<u8>>) {
+        self.apply_raw_edit(output);
+        if let Some(status) = self.settle() {
+            self.status.get_or_insert(status);
+        }
+    }
+
+    fn apply_raw_edit(&mut self, output: io::Result<Vec<u8>>) {
         let bytes = match output {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -182,7 +194,7 @@ impl App {
         let raw = self.raw.as_mut().expect("editor output answers a raw edit");
         if bytes.trim_ascii().is_empty() {
             self.raw = None;
-            self.status = Some("edit aborted");
+            self.status = Some("edit aborted".into());
             return;
         }
         if bytes == raw.original {
@@ -301,7 +313,7 @@ impl App {
                 let n = c as usize - '1' as usize;
                 if let Some((_, _, value)) = self.copyable().get(n) {
                     self.clipboard = Some(osc52::sequence(value));
-                    self.status = Some("copied");
+                    self.status = Some("copied".into());
                     self.mode = Mode::Browse;
                 }
             }
@@ -328,7 +340,7 @@ impl App {
             }
             Ok(Some(Conflict::Deleted)) => {
                 self.store(&path, Vec::new());
-                self.status = Some("card already deleted on disk");
+                self.status = Some("card already deleted on disk".into());
                 self.keep_position();
             }
             Err(err) => self.error = Some(format!("delete failed: {err}")),
@@ -445,34 +457,62 @@ impl App {
     }
 
     pub fn disk_changed(&mut self) {
-        if !matches!(
+        self.is_stale = true;
+        if let Some(status) = self.settle() {
+            self.status = Some(status);
+        }
+    }
+
+    fn settle(&mut self) -> Option<String> {
+        let is_idle = matches!(
             self.mode,
             Mode::Browse | Mode::Search | Mode::Help | Mode::Prompt
-        ) {
-            return;
+        ) && self.raw.is_none();
+        if !self.is_stale || !is_idle {
+            return None;
         }
+        self.is_stale = false;
         match vdir::load(&self.path) {
-            Ok(book) if is_unchanged(&book.files, &self.files) => {}
+            Ok(book) if is_unchanged(&book.files, &self.files) => None,
+            Ok(book) => Some(self.follow(book)),
+            Err(err) => {
+                self.error = Some(format!("reload failed: {err}"));
+                None
+            }
+        }
+    }
+
+    fn follow(&mut self, book: AddressBook) -> String {
+        let location = self.selected_location();
+        let removed = match &location {
+            Some(location) if !book.cards.iter().any(|(l, _)| l == location) => {
+                self.selected_card().map(Card::display_name)
+            }
+            _ => None,
+        };
+        self.replace(book);
+        let Some(name) = removed else {
+            self.show(location.as_ref());
+            return "reloaded".into();
+        };
+        self.keep_position();
+        format!("{name} removed on disk")
+    }
+
+    fn reload(&mut self, location: Option<Location>) {
+        match vdir::load(&self.path) {
             Ok(book) => {
-                self.replace(book, self.selected_location());
-                self.status = Some("reloaded");
+                self.replace(book);
+                self.show(location.as_ref());
             }
             Err(err) => self.error = Some(format!("reload failed: {err}")),
         }
     }
 
-    fn reload(&mut self, location: Option<Location>) {
-        match vdir::load(&self.path) {
-            Ok(book) => self.replace(book, location),
-            Err(err) => self.error = Some(format!("reload failed: {err}")),
-        }
-    }
-
-    fn replace(&mut self, book: AddressBook, location: Option<Location>) {
+    fn replace(&mut self, book: AddressBook) {
         self.cards = book.cards;
         self.files = book.files;
         self.skipped = book.skipped;
-        self.show(location.as_ref());
     }
 
     fn show(&mut self, location: Option<&Location>) {
@@ -557,7 +597,7 @@ impl App {
     }
 
     pub fn status(&self) -> Option<&str> {
-        self.status
+        self.status.as_deref()
     }
 
     pub fn form(&self) -> Option<&Form> {
