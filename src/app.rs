@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::card::{Card, Defect};
 use crate::form::Form;
 use crate::osc52;
+use crate::search;
 use crate::vdir::{self, AddressBook, Conflict, Location, Skipped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,10 +140,13 @@ impl App {
             KeyCode::Esc => {
                 self.query.clear();
                 self.mode = Mode::Browse;
+                self.filter(self.visible.get(self.selected).copied());
             }
-            _ => return,
+            _ => {}
         }
-        self.filter(self.visible.get(self.selected).copied());
+        if matches!(key.code, KeyCode::Char(_) | KeyCode::Backspace) {
+            self.filter(None);
+        }
     }
 
     fn open_form(&mut self) {
@@ -473,9 +477,7 @@ impl App {
     }
 
     fn filter(&mut self, current: Option<usize>) {
-        self.visible = (0..self.cards.len())
-            .filter(|&i| is_match(&self.cards[i].1, &self.query))
-            .collect();
+        self.visible = search::rank(self.cards.iter().map(|(_, card)| card), &self.query);
         self.selected = current
             .and_then(|card| self.visible.iter().position(|&i| i == card))
             .unwrap_or(0);
@@ -561,31 +563,6 @@ fn check_raw(bytes: &[u8]) -> Result<(), &'static str> {
         return Err("more than one card");
     }
     Card::parse(bytes).map(drop).map_err(Defect::reason)
-}
-
-fn is_match(card: &Card, query: &str) -> bool {
-    let needle = query.to_lowercase();
-    let org = card.organization().into_iter();
-    let emails = card.emails().into_iter().map(|email| email.value);
-    let texts = std::iter::once(card.display_name())
-        .chain(org.flat_map(|org| [org.company, org.department]))
-        .chain(emails);
-    if texts
-        .into_iter()
-        .any(|text| text.to_lowercase().contains(&needle))
-    {
-        return true;
-    }
-    let digits: String = query
-        .chars()
-        .filter(|c| !matches!(c, ' ' | '+' | '-' | '(' | ')'))
-        .collect();
-    !digits.is_empty()
-        && digits.bytes().all(|b| b.is_ascii_digit())
-        && card.phones().iter().any(|phone| {
-            let phone: String = phone.value.chars().filter(char::is_ascii_digit).collect();
-            phone.contains(&digits)
-        })
 }
 
 fn sort_key(card: &Card) -> (String, String, String) {
