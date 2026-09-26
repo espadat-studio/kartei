@@ -21,7 +21,7 @@ Keys are fixed. The status bar shows the main ones; `?` lists them per mode.
 | `?`                      | Help                        |
 | `q`                      | Quit                        |
 
-kartei watches the address book. When a `.vcf` file changes on disk while you browse, search, read help or the skipped list, it reloads at once, keeps your selection and filter, and says `reloaded`. Its own writes don't count. `R` still reloads on demand.
+kartei watches the address book. When a `.vcf` file changes on disk while you browse, search, read help or the skipped list, it reloads at once, keeps your selection and filter, and says `reloaded`. If the selected card is gone, the next one is selected and the status says `<name> removed on disk`. While you edit a card, answer a prompt or have a raw edit open, the reload waits until you're back in the list. Saving still checks the file first, so a card changed meanwhile shows the conflict prompt. Its own writes don't count. `R` still reloads on demand.
 
 ## Search
 
