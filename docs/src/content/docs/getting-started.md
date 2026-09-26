@@ -91,7 +91,7 @@ username = "you"
 password.fetch = ["command", "pass", "dav"]
 ```
 
-`collections = null` syncs a single address book straight into `path`, which is the flat layout kartei expects. Run `vdirsyncer sync` before and after editing.
+`collections = null` syncs a single address book straight into `path`, which is the flat layout kartei expects. Run `vdirsyncer sync` before and after editing. Changes a sync pulls in while kartei is open show up on their own.
 
 ## Lossless edits
 
