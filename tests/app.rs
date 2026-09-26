@@ -1377,6 +1377,123 @@ fn shift_r_reloads_cards_added_changed_or_removed_on_disk() {
 }
 
 #[test]
+fn a_change_on_disk_reloads_in_browse_search_help_and_the_skipped_list() {
+    for (test, key) in [
+        ("watch-browse", None),
+        ("watch-search", Some('/')),
+        ("watch-help", Some('?')),
+        ("watch-skipped", Some('!')),
+    ] {
+        let bob = card("Brown;Bob;;;", "Bob Brown", "1", "b@b");
+        let zed = card("Adams;Zed;;;", "Zed Adams", "1", "z@z");
+        let dir = address_book(
+            test,
+            &[
+                ("anna.vcf", ANNA),
+                ("bob.vcf", &bob),
+                ("zed.vcf", &zed),
+                ("broken.vcf", "nope"),
+            ],
+        );
+        let mut app = App::new(vdir::load(&dir).unwrap());
+        select(&mut app, "Bob Brown");
+        if let Some(key) = key {
+            press(&mut app, KeyCode::Char(key));
+        }
+        let mode = app.mode();
+        fs::write(
+            dir.join("cy.vcf"),
+            card("Cole;Cy;;;", "Cy Cole", "1", "c@c"),
+        )
+        .unwrap();
+        fs::write(dir.join("bob.vcf"), bob.replace("Bob", "Rob")).unwrap();
+        fs::remove_file(dir.join("zed.vcf")).unwrap();
+
+        app.disk_changed();
+        assert_eq!(
+            listed(&app),
+            ["Anna Adams", "Rob Brown", "Cy Cole"],
+            "{test}"
+        );
+        assert_eq!(app.selected_card().unwrap().display_name(), "Rob Brown");
+        assert_eq!(app.status(), Some("reloaded"), "{test}");
+        assert_eq!(app.mode(), mode, "{test}");
+    }
+}
+
+#[test]
+fn a_change_on_disk_keeps_the_filter_and_the_selection() {
+    let mut app = open("watch-filter");
+    let dir = std::env::temp_dir().join(format!("kartei-watch-filter-{}", std::process::id()));
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "brown");
+    press(&mut app, KeyCode::Enter);
+    fs::write(
+        dir.join("cy.vcf"),
+        card("Brown;Cy;;;", "Cy Brown", "1", "c@c"),
+    )
+    .unwrap();
+
+    app.disk_changed();
+    assert_eq!(app.query(), "brown");
+    assert_eq!(listed(&app), ["Bob Brown", "Cy Brown"]);
+    assert_eq!(app.selected_card().unwrap().display_name(), "Bob Brown");
+}
+
+#[test]
+fn a_change_on_disk_after_own_writes_changes_nothing() {
+    let mut app = open("watch-own");
+    let assert_unchanged = |app: &mut App| {
+        let before = listed(app);
+        let selected = app.selected();
+        app.disk_changed();
+        assert_eq!(app.status(), None);
+        assert_eq!(app.error(), None);
+        assert_eq!(listed(app), before);
+        assert_eq!(app.selected(), selected);
+    };
+
+    delete(&mut app, "Zed Adams");
+    assert_unchanged(&mut app);
+
+    select(&mut app, "Anna Adams");
+    press(&mut app, KeyCode::Char('E'));
+    let bytes = app.take_editor_request().unwrap();
+    app.finish_raw_edit(Ok(String::from_utf8(bytes)
+        .unwrap()
+        .replace("Anna", "Hanna")
+        .into_bytes()));
+    assert_unchanged(&mut app);
+
+    select(&mut app, "Bob Brown");
+    press(&mut app, KeyCode::Char('e'));
+    replace_given_name(&mut app, "Bob", "Rob");
+    save(&mut app);
+    assert_eq!(listed(&app), ["ACME Plumbing", "Hanna Adams", "Rob Brown"]);
+    assert_unchanged(&mut app);
+
+    add_ann_lee(&mut app);
+    assert_eq!(app.mode(), Mode::Browse);
+    assert_unchanged(&mut app);
+}
+
+#[test]
+fn a_failed_reload_on_a_change_on_disk_shows_the_error_and_keeps_the_cards() {
+    let mut app = open("watch-gone");
+    let dir = std::env::temp_dir().join(format!("kartei-watch-gone-{}", std::process::id()));
+    let before = listed(&app);
+    fs::remove_dir_all(&dir).unwrap();
+
+    app.disk_changed();
+    assert!(
+        app.error().unwrap().starts_with("reload failed"),
+        "{:?}",
+        app.error()
+    );
+    assert_eq!(listed(&app), before);
+}
+
+#[test]
 fn y_then_a_digit_emits_osc_52_with_that_value_and_reports_copied() {
     let mut app = open("copy");
     press(&mut app, KeyCode::Char('y'));
