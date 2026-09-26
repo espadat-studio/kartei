@@ -10,5 +10,6 @@ description = "Keyboard-driven editor for contacts stored as vCard files in a lo
 proptest = "1.11.0"
 
 [dependencies]
+clap = { version = "4.6.7", features = ["derive", "env"] }
 ratatui = "0.30.2"
 uuid = { version = "1.26.1", features = ["v4"] }

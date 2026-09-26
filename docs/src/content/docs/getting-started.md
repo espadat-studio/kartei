@@ -41,7 +41,7 @@ kartei
 
 A single file, such as a Thunderbird export, works the same way: `kartei Contacts.vcf`. New contacts go after the file's last one, with its line endings. In a directory, each new contact gets its own `<uid>.vcf`.
 
-The argument wins over `KARTEI_DIR`. With neither, or with a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1. `kartei --version` (or `-V`) prints the version.
+The argument wins over `KARTEI_DIR`. With neither, kartei prints short help and exits with status 2. An unknown flag also exits with status 2. With a path that is missing, unreadable, or neither a directory nor a `.vcf` file, kartei prints the error and exits with status 1. `kartei help` (or `-h`, `--help`) prints usage, so open a directory named `help` as `./help`; `kartei --version` (or `-V`) prints the version.
 
 ## Edit Thunderbird contacts
 
