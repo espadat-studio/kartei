@@ -7,3 +7,4 @@ pub mod osc52;
 pub mod search;
 pub mod ui;
 pub mod vdir;
+pub mod watch;
