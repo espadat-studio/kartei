@@ -4,7 +4,13 @@ title: "Getting Started"
 
 ## Install
 
-Download a binary for Linux (x86_64, aarch64) or macOS (Apple Silicon) from the [latest release](https://github.com/espadat-studio/kartei/releases/latest). Extract it somewhere on your `PATH`, e.g. `~/.local/bin`.
+Binaries exist for Linux (x86_64, aarch64) and macOS (Apple Silicon). Install one with [mise](https://mise.jdx.dev/), which fetches it from the GitHub release:
+
+```bash
+mise use -g github:espadat-studio/kartei
+```
+
+Or download it from the [latest release](https://github.com/espadat-studio/kartei/releases/latest) and extract it somewhere on your `PATH`, e.g. `~/.local/bin`.
 
 Or install from crates.io:
 
