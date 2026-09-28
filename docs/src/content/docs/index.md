@@ -33,8 +33,8 @@ kartei is a keyboard-driven address book for the `.vcf` files on your disk: a fo
 ## Quick start
 
 ```bash
-cargo install kartei
+mise use -g github:espadat-studio/kartei
 kartei ~/.local/share/contacts
 ```
 
-[Getting Started](/getting-started/) covers the release binaries, Thunderbird and vdirsyncer. The [Keymap](/keymap/) lists every key.
+[Getting Started](/getting-started/) covers the other installs, Thunderbird and vdirsyncer. The [Keymap](/keymap/) lists every key.

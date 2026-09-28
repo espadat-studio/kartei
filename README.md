@@ -36,7 +36,13 @@ kartei is a keyboard-driven address book for the `.vcf` files on your disk: a fo
 
 ## Install
 
-Download a binary for Linux (x86_64, aarch64) or macOS (Apple Silicon) from the [latest release](https://github.com/espadat-studio/kartei/releases/latest) and put it on your `PATH`, or install from crates.io:
+Binaries exist for Linux (x86_64, aarch64) and macOS (Apple Silicon). Install one with [mise](https://mise.jdx.dev/):
+
+```bash
+mise use -g github:espadat-studio/kartei
+```
+
+Or download it from the [latest release](https://github.com/espadat-studio/kartei/releases/latest) and put it on your `PATH`. Or build from crates.io:
 
 ```bash
 cargo install kartei
