@@ -8,7 +8,7 @@ export default defineConfig({
     starlight({
       plugins: [starlightLlmsTxt()],
       title: "kartei",
-      description: "Keyboard-driven editor for contacts stored as vCard files in a local vdir.",
+      description: "Terminal address book for vCard files. Edits touch only the lines you change, so Apple and CardDAV extras survive the next sync.",
       logo: { src: "./src/assets/mark.svg", alt: "Espadat" },
       head: [{ tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "16x16 32x32" } }],
       customCss: ["@espadat/docs-theme/styles/theme.css"],
