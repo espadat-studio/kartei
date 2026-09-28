@@ -1,10 +1,12 @@
 [package]
 name = "kartei"
 version = "2.0.0"
+categories = ["command-line-utilities", "email"]
 edition = "2024"
+keywords = ["vcard", "contacts", "tui", "carddav", "address-book"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/espadat-studio/kartei"
-description = "Keyboard-driven editor for contacts stored as vCard files in a local vdir."
+description = "Terminal address book for vCard files. Edits touch only the lines you change, so Apple and CardDAV extras survive the next sync."
 
 [dev-dependencies]
 proptest = "1.11.0"
