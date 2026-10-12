@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1](https://github.com/espadat-studio/kartei/compare/v2.0.0...v2.0.1) - 2026-10-12
+
+### Other
+
+- use org github app client id ([#77](https://github.com/espadat-studio/kartei/pull/77))
+- *(deps)* update all non-major dependencies ([#76](https://github.com/espadat-studio/kartei/pull/76))
+- *(deps)* bump source-map-js from 1.2.1 to 1.2.2 in /docs ([#74](https://github.com/espadat-studio/kartei/pull/74))
+- *(deps)* update taiki-e/install-action digest to 1168f68 ([#73](https://github.com/espadat-studio/kartei/pull/73))
+- *(deps)* bump sharp from 0.35.4 to 0.35.5 in /docs ([#75](https://github.com/espadat-studio/kartei/pull/75))
+- *(deps)* update taiki-e/install-action digest to ab68953 ([#72](https://github.com/espadat-studio/kartei/pull/72))
+- *(deps)* update release-plz/action digest to f393a7b ([#71](https://github.com/espadat-studio/kartei/pull/71))
+- *(deps)* update dtolnay/rust-toolchain digest to 686976e ([#69](https://github.com/espadat-studio/kartei/pull/69))
+- *(deps)* update actions/setup-node digest to 949feb2 ([#68](https://github.com/espadat-studio/kartei/pull/68))
+- research how baikal, syncers and pimdir fit together ([#67](https://github.com/espadat-studio/kartei/pull/67))
+- lead the copy with lossless edits ([#66](https://github.com/espadat-studio/kartei/pull/66))
+
 ## [2.0.0](https://github.com/espadat-studio/kartei/compare/v1.0.0...v2.0.0) - 2026-09-26
 
 ### Added
