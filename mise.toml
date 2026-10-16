@@ -26,4 +26,4 @@ depends = ["check-*"]
 hk = "2.6.0"
 node = "24.22.0"
 pkl = "0.32.1"
-rust = { version = "1.99.0", components = "clippy,rustfmt" }
+rust = { version = "1.99.1", components = "clippy,rustfmt" }
