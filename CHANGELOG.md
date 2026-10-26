@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2](https://github.com/espadat-studio/kartei/compare/v2.0.1...v2.0.2) - 2026-10-26
+
+### Other
+
+- *(deps)* update hk to v2.8.1 ([#98](https://github.com/espadat-studio/kartei/pull/98))
+- *(deps)* update all dependencies ([#97](https://github.com/espadat-studio/kartei/pull/97))
+- *(renovate)* batch all updates into one weekly pr ([#96](https://github.com/espadat-studio/kartei/pull/96))
+- *(deps)* update release-plz/action digest to 6caa8d3 ([#94](https://github.com/espadat-studio/kartei/pull/94))
+- *(deps)* update dependency astro to v7.4.1 ([#95](https://github.com/espadat-studio/kartei/pull/95))
+- *(deps)* update jdx/mise-action digest to fc42bcc ([#92](https://github.com/espadat-studio/kartei/pull/92))
+- *(deps)* update hk to v2.7.1 ([#93](https://github.com/espadat-studio/kartei/pull/93))
+- *(deps)* update hk to v2.7.0 ([#89](https://github.com/espadat-studio/kartei/pull/89))
+- *(deps)* update dependency aqua:dprint/dprint to v0.64.0 ([#91](https://github.com/espadat-studio/kartei/pull/91))
+- *(deps)* update taiki-e/install-action digest to 8cca091 ([#90](https://github.com/espadat-studio/kartei/pull/90))
+- *(deps)* update jdx/mise-action digest to 9b200bc ([#88](https://github.com/espadat-studio/kartei/pull/88))
+- *(deps)* update all non-major dependencies ([#86](https://github.com/espadat-studio/kartei/pull/86))
+- *(deps)* update dtolnay/rust-toolchain digest to b725eda ([#87](https://github.com/espadat-studio/kartei/pull/87))
+- *(deps)* update node.js to v24.22.0 ([#85](https://github.com/espadat-studio/kartei/pull/85))
+- *(deps)* update hk to v2.6.0 ([#82](https://github.com/espadat-studio/kartei/pull/82))
+- *(deps)* update jdx/mise-action digest to 08ae2a0 ([#81](https://github.com/espadat-studio/kartei/pull/81))
+- *(deps)* update actions/create-github-app-token digest to 64ab729 ([#83](https://github.com/espadat-studio/kartei/pull/83))
+- *(deps)* update release-plz/action digest to 8921286 ([#84](https://github.com/espadat-studio/kartei/pull/84))
+- *(deps)* update jdx/mise-action action to v5 ([#80](https://github.com/espadat-studio/kartei/pull/80))
+- *(deps)* update hk to v2.5.0 ([#79](https://github.com/espadat-studio/kartei/pull/79))
+
 ## [2.0.1](https://github.com/espadat-studio/kartei/compare/v2.0.0...v2.0.1) - 2026-10-12
 
 ### Other
