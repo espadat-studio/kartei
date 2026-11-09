@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3](https://github.com/espadat-studio/kartei/compare/v2.0.2...v2.0.3) - 2026-11-09
+
+### Other
+
+- *(deps)* bump undici from 8.11.2 to 8.12.3 in /docs ([#100](https://github.com/espadat-studio/kartei/pull/100))
+- *(deps)* update rust crate uuid to v1.29.2 ([#105](https://github.com/espadat-studio/kartei/pull/105))
+- *(deps)* update tooling dependencies ([#106](https://github.com/espadat-studio/kartei/pull/106))
+- *(renovate)* split runtime and tooling dependency prs ([#104](https://github.com/espadat-studio/kartei/pull/104))
+- *(deps)* bump postcss-selector-parser from 6.1.4 to 6.1.5 in /docs ([#103](https://github.com/espadat-studio/kartei/pull/103))
+- *(deps)* update all dependencies ([#102](https://github.com/espadat-studio/kartei/pull/102))
+- *(deps)* update hk to v2.11.0 ([#101](https://github.com/espadat-studio/kartei/pull/101))
+
 ## [2.0.2](https://github.com/espadat-studio/kartei/compare/v2.0.1...v2.0.2) - 2026-10-26
 
 ### Other
