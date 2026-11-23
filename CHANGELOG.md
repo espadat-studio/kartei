@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.4](https://github.com/espadat-studio/kartei/compare/v2.0.3...v2.0.4) - 2026-11-23
+
+### Other
+
+- *(deps)* update tooling dependencies ([#109](https://github.com/espadat-studio/kartei/pull/109))
+- *(deps)* update runtime dependencies ([#110](https://github.com/espadat-studio/kartei/pull/110))
+- *(deps)* update tooling dependencies ([#108](https://github.com/espadat-studio/kartei/pull/108))
+
 ## [2.0.3](https://github.com/espadat-studio/kartei/compare/v2.0.2...v2.0.3) - 2026-11-09
 
 ### Other
