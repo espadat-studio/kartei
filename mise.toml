@@ -22,8 +22,8 @@ depends = ["check-*"]
 [tools]
 "cargo:cargo-nextest" = "0.9.152"
 "cargo:convco" = "0.7.2"
-"aqua:dprint/dprint" = "0.64.3"
-hk = "2.12.0"
+"aqua:dprint/dprint" = "0.65.0"
+hk = "2.13.0"
 node = "26.13.1"
-pkl = "0.33.0"
+pkl = "0.33.1"
 rust = { version = "1.100.0", components = "clippy,rustfmt" }
